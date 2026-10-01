@@ -1,33 +1,30 @@
 # non-avian-validation
 
-## Development environment
+Review BirdNET detections in [jupyter_bioacoustic](https://github.com/SchmidtDSE/jupyter_bioacoustic).
 
-This project uses a [dev container](https://containers.dev/) + [pixi](https://pixi.sh) for
-reproducible Python/Jupyter environment management (same pattern as
-[`ca-anuran-sandbox`](https://github.com/avanscoyoc/ca-anuran-sandbox)).
+## Setup (once)
 
-### Quick start
+1. Open the repo in VS Code and click **Reopen in Container**.
+2. Create a `.env` file in the repo root:
+   ```
+   API_TOKEN=<value of your API session token cookie>
+   ```
 
-**VS Code / GitHub Codespaces**: open the repo and "Reopen in Container" (or let Codespaces
-build it automatically). The container installs [pixi](https://pixi.sh) and, on creation, runs
-`pixi install` to set up the `default` environment declared in `pixi.toml`.
+## Run
 
-**Without a dev container**: install [pixi](https://pixi.sh/#install) locally, then from the
-repo root run:
+1. In the VS Code terminal, run:
+   ```bash
+   pixi run jupyter
+   ```
+2. Ctrl/Cmd+click the `http://127.0.0.1:8888/lab?token=...` link it prints.
+3. In the browser, open `notebooks/01_review_detections.ipynb`.
+4. Edit the filters (`SPECIES`, `SITES`, `RECORDING_IDS`, `MIN_CONFIDENCE`) if needed.
+5. **Run → Run All Cells**. The annotator appears at the bottom.
+6. When done, press Ctrl+C in the terminal.
 
-```bash
-pixi install
-pixi run jupyter   # launches JupyterLab on http://localhost:8888
-```
+The annotator only works in JupyterLab in the browser, not in VS Code's notebook viewer.
 
-### Packages
+## Troubleshooting
 
-The pixi environment (see `pixi.toml`) provides Python, JupyterLab/`ipykernel`, and:
-
-- [`jupyter_bioacoustic`](https://github.com/SchmidtDSE/jupyter_bioacoustic) — a JupyterLab
-  plugin for reviewing and annotating bioacoustic audio clips.
-- [`ondio`](https://github.com/SchmidtDSE/ondio) — uniform IO of audio data and bioacoustic
-  model results across S3, GCS, HTTP, and local filesystems.
-
-`notebooks/00_environment_check.ipynb` is a minimal smoke-test notebook that imports both
-packages and prints their installed versions.
+- **"API token rejected"**: copy a fresh token into `.env` and rerun all cells.
+- **Link shows port 8889**: another server is running. Use the printed link, or stop the other server.

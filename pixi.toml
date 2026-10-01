@@ -12,11 +12,13 @@ ipykernel = ">=7.4.0,<8"
 # audio (ffmpeg enables fast partial/byte-range reads in jupyter-bioacoustic & ondio)
 ffmpeg = "*"
 pytest = "*"
+python-dotenv = "*"
 
 [pypi-dependencies]
 jupyter-bioacoustic = "*"
 ondio = "*"
 
 [tasks]
-jupyter = "jupyter lab --ip=0.0.0.0 --no-browser"
+# --allow-root: the dev container runs as root (remoteUser in devcontainer.json)
+jupyter = "jupyter lab --ip=0.0.0.0 --no-browser --allow-root"
 test = "pytest -q tests"
