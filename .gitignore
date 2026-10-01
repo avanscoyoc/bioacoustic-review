@@ -1,0 +1,21 @@
+# pixi environments
+.pixi
+*.egg-info
+
+# data (audio/validation data is not redistributable)
+/data/
+__pycache__/
+.env
+
+# never commit audio or derived arrays, wherever they end up
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.npy
+*.npz
+*.parquet
+.DS_Store
+
+# jupyter
+.ipynb_checkpoints

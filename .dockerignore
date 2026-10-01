@@ -1,0 +1,2 @@
+# keep the build context tiny; the repo is bind-mounted, not copied
+*

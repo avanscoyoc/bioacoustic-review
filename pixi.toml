@@ -1,0 +1,22 @@
+[workspace]
+authors = ["avanscoyoc <amy.e.van.scoyoc@gmail.com>"]
+channels = ["conda-forge"]
+name = "non-avian-validation"
+platforms = ["osx-arm64", "linux-64", "linux-aarch64"]
+version = "0.1.0"
+
+[dependencies]
+python = "3.12.*"
+jupyterlab = ">=4.6.4,<5"
+ipykernel = ">=7.4.0,<8"
+# audio (ffmpeg enables fast partial/byte-range reads in jupyter-bioacoustic & ondio)
+ffmpeg = "*"
+pytest = "*"
+
+[pypi-dependencies]
+jupyter-bioacoustic = "*"
+ondio = "*"
+
+[tasks]
+jupyter = "jupyter lab --ip=0.0.0.0 --no-browser"
+test = "pytest -q tests"

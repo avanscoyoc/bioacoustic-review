@@ -1,0 +1,27 @@
+{
+  "name": "non-avian-validation",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  // Work directly in the local repo folder (code + data/ persist on the host).
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace",
+  // Linux pixi env lives in a Docker volume so it never clashes with a macOS .pixi on the host.
+  "mounts": ["source=non-avian-validation-pixi,target=/workspace/.pixi,type=volume"],
+  "forwardPorts": [8888],
+  "remoteUser": "root",
+  "postCreateCommand": "pixi install",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/workspace/.pixi/envs/default/bin/python"
+      }
+    }
+  }
+}
