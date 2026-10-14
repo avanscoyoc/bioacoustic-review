@@ -1,0 +1,11 @@
+project_name: cdfw_detections
+config: annotator_config/config/cdfw_detections.yaml
+data:
+  source_type: path
+  value: data/filtered_detection.csv
+  index_column: id
+audio:
+  source_type: column
+  value: path
+output:
+  path: output/cdfw_reviews.csv

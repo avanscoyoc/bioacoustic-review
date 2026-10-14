@@ -1,0 +1,20 @@
+description:
+  title: Annotation Instructions
+  text: "There are 5 types of annotations available:\n\n---\n\n- `time_select`: Single\
+    \ draggable vertical line\n- `start_end_time_select`: Two draggable vertical lines\
+    \ (constrained \u2014 can't cross)\n- `bounding_box`: Click+drag rectangle with\
+    \ individually draggable edges\n- `multibox`: Draw multiple bounding boxes, each\
+    \ with optional per-box form. Submits one row per box.\n- `fixed_duration`: Click\
+    \ to place a fixed-length time region. Duration is set in config.\n"
+  open: false
+display_columns:
+- site
+- recording_id
+- common_name
+- confidence
+info_card_title: '[[common_name]]'
+info_card_text: 'scientific_name: [[scientific_name]]'
+capture: true
+capture_dir: spectrograms
+default_buffer: 0.5
+form_config: annotator_config/forms/cdfw_detections.yaml
