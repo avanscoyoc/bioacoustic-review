@@ -2,7 +2,7 @@
 authors = ["avanscoyoc <amy.e.van.scoyoc@gmail.com>"]
 channels = ["conda-forge"]
 name = "non-avian-validation"
-platforms = ["osx-arm64", "linux-64", "linux-aarch64"]
+platforms = ["osx-arm64", "linux-64", "linux-aarch64", "win-64"]
 version = "0.1.0"
 
 [dependencies]
@@ -13,6 +13,8 @@ ipykernel = ">=7.4.0,<8"
 ffmpeg = "*"
 pytest = "*"
 python-dotenv = "*"
+plotly = ">=7.1.0,<8"
+anywidget = ">=0.11.0,<0.12"
 
 [pypi-dependencies]
 jupyter-bioacoustic = "*"
@@ -22,3 +24,7 @@ ondio = "*"
 # --allow-root: the dev container runs as root (remoteUser in devcontainer.json)
 jupyter = "jupyter lab --ip=0.0.0.0 --no-browser --allow-root"
 test = "pytest -q tests"
+
+[target.win-64.tasks]
+# Run natively on Windows: open the browser already logged in (no token to copy)
+jupyter = "jupyter lab"

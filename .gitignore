@@ -6,7 +6,7 @@
 /data/
 __pycache__/
 .env
-
+/local_data/
 # never commit audio or derived arrays, wherever they end up
 *.wav
 *.mp3

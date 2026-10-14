@@ -1,0 +1,15 @@
+# Review the recordings in local_data/metadata.csv (used by notebooks/02_review_local_recordings.ipynb).
+# Paths are relative to notebooks/, where the notebook kernel runs.
+description:
+  text: Listen to each recording, draw a box around every call, and pick its species.
+data:
+  index_column: id
+audio:
+  source_type: column
+  value: path  # relative to notebooks/ or absolute, as written by the notebook's first cell
+output: ../data/local_recordings_annotations.csv
+display_columns: [path, start_time, end_time]
+info_card_title: "[[path]] ([[start_time]]-[[end_time]] s)"
+default_buffer: 0  # play exactly start_time to end_time
+capture: true
+form_config: ../annotator_config/forms/local_recordings.yaml

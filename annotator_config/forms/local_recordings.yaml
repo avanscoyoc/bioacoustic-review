@@ -1,0 +1,21 @@
+# Form for annotator_config/config/local_recordings.yaml.
+# Paths are relative to notebooks/, where the notebook kernel runs.
+title:
+  value: Local recordings
+  progress_tracker: true
+annotation:
+  tools:
+  - start_end_time_select
+  - multibox
+  form: species list
+dynamic_forms:
+  species list:
+  - select:
+      label: species
+      column: species
+      required: true
+      items:
+        path: ../species.csv
+        value: common_name
+        filter_box: true
+        custom_value: true  # lets reviewers add names not in species.csv, e.g. nutria

@@ -28,9 +28,9 @@ def connect(api_url, token_env, cookie_name, check_path="/users/me"):
     print("API token OK")
 
 
-def query_api(path):
-    """GET `{API_URL}{path}` with the session cookie and return the JSON body."""
-    r = requests.get(f"{API_URL}{path}", cookies=COOKIES, timeout=30)
+def query_api(path, timeout=120, **params):
+    """GET `{API_URL}{path}?{params}` with the session cookie and return the JSON body."""
+    r = requests.get(f"{API_URL}{path}", params=params, cookies=COOKIES, timeout=timeout)
     r.raise_for_status()
     return r.json()
 
