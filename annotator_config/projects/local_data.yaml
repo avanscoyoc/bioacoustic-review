@@ -1,0 +1,12 @@
+project_name: local_data
+config: annotator_config/config/local_data.yaml
+data:
+  source_type: path
+  value: local_data/metadata.csv
+  index_column: id
+audio:
+  source_type: column
+  value: path
+output:
+  path: output/reviews_local_data.csv
+  index_column: id

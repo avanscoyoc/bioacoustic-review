@@ -1,0 +1,24 @@
+description:
+  title: Annotation Instructions
+  text: "There are 5 types of annotations available:\n\n---\n\n- **time-select**:\
+    \ Single draggable vertical line\n- **start-end-time-select**: Two draggable vertical\
+    \ lines (constrained \u2014 can't cross)\n- **bounding-box**: Click+drag rectangle\
+    \ with individually draggable edges\n- **multibox**: Draw multiple bounding boxes,\
+    \ each with optional per-box form. Submits one row per box.\n- **fixed-duration**:\
+    \ Click to place a fixed-length time region. Duration is set in config.\n"
+  open: false
+capture: true
+default_buffer: 0.25
+display_columns:
+- id
+- path
+- start_time
+- end_time
+visualizations:
+- plain
+- mel
+- log_frequency
+- bandpass
+- waveform
+sort: id
+form_config: annotator_config/forms/local_data.yaml

@@ -8,7 +8,10 @@ Review BirdNET detections in [jupyter_bioacoustic](https://github.com/SchmidtDSE
 2. Create a `.env` file in the repo root:
    ```
    API_TOKEN=<value of your API session token cookie>
+   AWS_ACCESS_KEY_ID=<your AWS access key>
+   AWS_SECRET_ACCESS_KEY=<your AWS secret key>
    ```
+   The AWS keys let the notebook read the audio straight from S3. If they're temporary credentials, also add `AWS_SESSION_TOKEN=<...>`.
 
 ## Run
 

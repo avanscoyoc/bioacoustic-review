@@ -1,0 +1,21 @@
+title:
+  value: Bioacoustic Annotator
+  progress_tracker: true
+annotation:
+  tools:
+  - multibox
+  - fixed_duration:
+      window: 3
+  form: species_form
+dynamic_forms:
+  species_form:
+  - select:
+      label: Species
+      column: species
+      required: true
+      items:
+        path: species.csv
+        value: common_name
+        filter_box: true
+        custom_value: true
+        not_available: true

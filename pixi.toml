@@ -22,9 +22,10 @@ ondio = "*"
 
 [tasks]
 # --allow-root: the dev container runs as root (remoteUser in devcontainer.json)
-jupyter = "jupyter lab --ip=0.0.0.0 --no-browser --allow-root"
+# iopub_data_rate_limit: jupyter_bioacoustic sends audio as notebook output, which the 1 MB/s default cuts off
+jupyter = "jupyter lab --ip=0.0.0.0 --no-browser --allow-root --ServerApp.iopub_data_rate_limit=1e10"
 test = "pytest -q tests"
 
 [target.win-64.tasks]
 # Run natively on Windows: open the browser already logged in (no token to copy)
-jupyter = "jupyter lab"
+jupyter = "jupyter lab --ServerApp.iopub_data_rate_limit=1e10"
