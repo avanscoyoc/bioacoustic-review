@@ -2,7 +2,7 @@ project_name: cdfw_detections
 config: annotator_config/config/cdfw_detections.yaml
 data:
   source_type: path
-  value: data/filtered_detection.csv
+  value: detection_data/filtered_detections.csv
   index_column: id
 audio:
   source_type: column
