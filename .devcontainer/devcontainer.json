@@ -1,5 +1,5 @@
 {
-  "name": "non-avian-validation",
+  "name": "bioacoustic-review",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
@@ -8,7 +8,7 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
   "workspaceFolder": "/workspace",
   // Linux pixi env lives in a Docker volume so it never clashes with a macOS .pixi on the host.
-  "mounts": ["source=non-avian-validation-pixi,target=/workspace/.pixi,type=volume"],
+  "mounts": ["source=bioacoustic-review-pixi,target=/workspace/.pixi,type=volume"],
   "forwardPorts": [8888],
   "remoteUser": "root",
   "postCreateCommand": "pixi install",

@@ -1,54 +1,85 @@
-# non-avian-validation
+# bioacoustic-review
 
-Review BirdNET detections in [jupyter_bioacoustic](https://github.com/SchmidtDSE/jupyter_bioacoustic).
+Notebooks for listening to wildlife recordings, checking BirdNET detections and annotating your own audio, using the [jupyter_bioacoustic](https://github.com/SchmidtDSE/jupyter_bioacoustic) annotator.
 
-## Setup (once)
+## What's in the repo
 
-1. Open the repo in VS Code and click **Reopen in Container**.
-2. Create a `.env` file in the repo root:
-   ```
-   API_TOKEN=<value of your API session token cookie>
-   AWS_ACCESS_KEY_ID=<your AWS access key>
-   AWS_SECRET_ACCESS_KEY=<your AWS secret key>
-   ```
-   The AWS keys let the notebook read the audio straight from S3. If they're temporary credentials, also add `AWS_SESSION_TOKEN=<...>`.
+There are two workflows. Each has its own notebook, data folder and annotator config:
 
-## Run
+| | 1. CDFW detections | 2. Local recordings |
+|---|---|---|
+| Notebook | `notebooks/01_review_CDFW_detections.ipynb` | `notebooks/02_review_local_recordings.ipynb` |
+| What you review | A random sample of detections at sites you pick on a map | Your own audio files, whole or split into clips |
+| Audio comes from | S3, via the Wildlife Sound Hub API | `local_data/audio/` |
+| Needs | `.env` with an API token and AWS keys | Nothing |
+| Clip list | `detection_data/filtered_detections.csv` | `local_data/metadata.csv` |
+| Answers saved to | `output/cdfw_reviews.csv` | `output/reviews_local_data.csv` |
+| Annotator config | `annotator_config/*/cdfw_detections.yaml` | `annotator_config/*/local_data.yaml` |
 
-1. In the VS Code terminal, run:
-   ```bash
-   pixi run jupyter
-   ```
-2. Ctrl/Cmd+click the `http://127.0.0.1:8888/lab?token=...` link it prints.
-3. In the browser, open `notebooks/01_review_CDFW_detections.ipynb`.
-4. Edit the filters (`SPECIES`, `SITES`, `RECORDING_IDS`, `MIN_CONFIDENCE`) if needed.
-5. **Run → Run All Cells**. The annotator appears at the bottom.
-6. When done, press Ctrl+C in the terminal.
+```
+notebooks/            the two workflows
+annotator_config/
+  projects/           which clip list to load and where to save answers
+  config/             columns shown, spectrogram views, instructions
+  forms/              the questions asked for each clip
+species.csv           species list for the dropdowns in both forms
+pixi.toml             environment: Python, JupyterLab, ffmpeg, jupyter-bioacoustic
+.devcontainer/        optional Docker setup for VS Code
+```
 
-The annotator only works in JupyterLab in the browser, not in VS Code's notebook viewer.
+Git ignores `.env`, `local_data/`, `detection_data/` and `output/`. The notebooks create these folders when they run.
 
-## Windows (no container): review local recordings
+**Species:** `species.csv` sets the species options in both forms. The forms read its `common_name` column, so edit or replace the file to review other species. It currently lists 33 California frog and toad species, plus 3 groups for species whose calls can't be told apart (`MYLF`, `PACH`, `WETO`). Each row also has a 4-letter code, the scientific name, native or non-native status, and aliases.
 
-1. Install pixi. In PowerShell, run:
-   ```powershell
-   powershell -ExecutionPolicy ByPass -c "irm -useb https://pixi.sh/install.ps1 | iex"
-   ```
-   Then close and reopen PowerShell.
-2. Put the audio in `local_data\audio\`. Subfolders are fine.
-3. In PowerShell, in the repo folder, run:
-   ```powershell
-   pixi run jupyter
-   ```
-   The first run installs everything, which takes a few minutes. JupyterLab then opens in your browser, already logged in.
-4. Open `notebooks/02_review_local_recordings.ipynb`. In the first code cell:
-   - If the audio is somewhere else, set `AUDIO_DIR` to that folder, using `/` (e.g. `"D:/recordings"`).
-   - To split recordings into chunks, set `CHUNK_SECONDS` (e.g. `10`). Leave it `None` to review whole recordings.
-5. Click **Run → Run All Cells**. The first cell writes `local_data\metadata.csv`; the second loads it into the annotator.
-6. When done, press Ctrl+C in PowerShell.
+## Get started
 
-No `.env` or API token is needed for local recordings.
+**1. Download the repo.**
+
+```bash
+git clone https://github.com/avanscoyoc/bioacoustic-review.git
+cd bioacoustic-review
+```
+
+Without git, click **Code → Download ZIP** on GitHub and unzip it.
+
+**2. Install [pixi](https://pixi.sh).** You only need to do this once. Close and reopen your terminal afterwards.
+
+- macOS or Linux: `curl -fsSL https://pixi.sh/install.sh | sh`
+- Windows (PowerShell): `powershell -ExecutionPolicy ByPass -c "irm -useb https://pixi.sh/install.ps1 | iex"`
+
+Another option on any OS with Docker, including Intel Macs (`pixi.toml` doesn't include them as a platform): open the folder in VS Code, click **Reopen in Container**, and skip this step. Inside the container, your audio has to be inside the repo folder.
+
+**3. Add your data.**
+
+- **Local recordings:** create `local_data/audio/` and copy your audio into it (`.wav`, `.flac`, `.mp3` or `.ogg`; subfolders are fine). To use audio stored somewhere else, set `AUDIO_DIR` in the notebook instead.
+- **CDFW detections:** create a file named `.env` in the repo folder:
+  ```
+  API_TOKEN=<your __Secure-authjs.session-token cookie from Wildlife Sound Hub>
+  AWS_ACCESS_KEY_ID=<your AWS access key>
+  AWS_SECRET_ACCESS_KEY=<your AWS secret key>
+  ```
+  If your AWS credentials are temporary, also add `AWS_SESSION_TOKEN=<...>`.
+
+**4. Run.** Navigate to the repo folder, run:
+
+```bash
+pixi run jupyter
+```
+
+The first run installs everything, which takes a few minutes. On Windows, JupyterLab opens in your browser. On other systems, open the `http://127.0.0.1:8888/lab?token=...` link it prints.
+
+Then:
+
+1. Open a notebook in `notebooks/`.
+2. Set the options near the top:
+   - Notebook 01: `SPECIES_WORDS`, `MIN_CONFIDENCE`, `CLIPS_PER_SITE`. You also pick sites on the map.
+   - Notebook 02: `AUDIO_DIR`, and `CHUNK_SECONDS` to split recordings into clips.
+3. Run the cells from top to bottom. The annotator appears at the bottom and saves each answer as you go.
+4. When you're done, press Ctrl+C in the terminal.
+
+The annotator only works in JupyterLab in a browser. It doesn't work in VS Code's notebook viewer. Annotations are output to a single file in outputs and overwritten with any additions or deletions, even when you stop a session and come back later.
 
 ## Troubleshooting
 
-- **"API token rejected"**: copy a fresh token into `.env` and rerun all cells.
-- **Link shows port 8889**: another server is running. Use the printed link, or stop the other server.
+- **401 error in notebook 01's first cell:** your API token has expired. Copy a fresh one into `.env` and run the notebook again.
+- **The link shows port 8889:** another Jupyter server is already running. Use the printed link, or stop the other server.

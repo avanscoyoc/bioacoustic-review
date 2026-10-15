@@ -1,22 +1,29 @@
-# pixi environments
-.pixi
-*.egg-info
-
-# data (audio/validation data is not redistributable)
-/data/
-__pycache__/
+# Environment and secrets
+.pixi/*
+!.pixi/config.toml
 .env
+
+# Data and results. The notebooks regenerate them, and the audio isn't ours to redistribute.
+/detection_data/
 /local_data/
-# never commit audio or derived arrays, wherever they end up
+/output/
+
+# Audio and derived arrays, wherever they end up
 *.wav
+*.flac
 *.mp3
 *.m4a
-*.flac
+*.ogg
 *.npy
 *.npz
 *.parquet
-.DS_Store
 
-# jupyter
-.ipynb_checkpoints
-output/
+# Python and Jupyter
+__pycache__/
+.ipynb_checkpoints/
+.Trash-*/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

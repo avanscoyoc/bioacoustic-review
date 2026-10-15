@@ -1,7 +1,7 @@
 [workspace]
 authors = ["avanscoyoc <amy.e.van.scoyoc@gmail.com>"]
 channels = ["conda-forge"]
-name = "non-avian-validation"
+name = "bioacoustic-review"
 platforms = ["osx-arm64", "linux-64", "linux-aarch64", "win-64"]
 version = "0.1.0"
 
