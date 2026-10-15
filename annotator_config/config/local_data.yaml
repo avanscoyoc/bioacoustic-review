@@ -1,13 +1,16 @@
 description:
-  title: Annotation Instructions
-  text: "There are 5 types of annotations available:\n\n---\n\n- **time-select**:\
-    \ Single draggable vertical line\n- **start-end-time-select**: Two draggable vertical\
-    \ lines (constrained \u2014 can't cross)\n- **bounding-box**: Click+drag rectangle\
-    \ with individually draggable edges\n- **multibox**: Draw multiple bounding boxes,\
-    \ each with optional per-box form. Submits one row per box.\n- **fixed-duration**:\
-    \ Click to place a fixed-length time region. Duration is set in config.\n"
+  title: Instructions
+  text: "Mark each call on the spectrogram and choose its species. Pick a tool from\
+    \ the **tool** menu:\n\n- **multibox**: click and drag to draw a box around a\
+    \ call. Draw as many boxes as you need. Each box gets its own species and is saved\
+    \ as its own row.\n- **fixed duration**: click to place a 3-second window, then\
+    \ drag it or use the arrow keys to move it. Choose one species for the window.\n\
+    \nType in the species list to filter it, or enter a name that isn't listed. Click\
+    \ **Submit** to save, or **Skip** to move on without saving. **Capture** saves an\
+    \ image of the spectrogram to `output/spectrograms/`.\n"
   open: false
 capture: true
+capture_dir: output/spectrograms
 default_buffer: 0.25
 display_columns:
 - id

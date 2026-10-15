@@ -1,11 +1,11 @@
 description:
-  title: Annotation Instructions
-  text: "There are 5 types of annotations available:\n\n---\n\n- `time_select`: Single\
-    \ draggable vertical line\n- `start_end_time_select`: Two draggable vertical lines\
-    \ (constrained \u2014 can't cross)\n- `bounding_box`: Click+drag rectangle with\
-    \ individually draggable edges\n- `multibox`: Draw multiple bounding boxes, each\
-    \ with optional per-box form. Submits one row per box.\n- `fixed_duration`: Click\
-    \ to place a fixed-length time region. Duration is set in config.\n"
+  title: Instructions
+  text: "Listen to the clip and look at the spectrogram, then answer whether the detected\
+    \ species is correct.\n\n- **Yes**: rate your confidence and add notes if needed.\n\
+    - **No**: choose a reason, the species you hear (if you know it), and the signal\
+    \ quality. Flag the clip if an expert should check it.\n\nClick **Submit** to save\
+    \ your answer, or **Skip** to move on without answering. **Capture** saves an image\
+    \ of the spectrogram to `output/spectrograms/`.\n"
   open: false
 display_columns:
 - site
@@ -13,8 +13,8 @@ display_columns:
 - common_name
 - confidence
 info_card_title: '[[common_name]]'
-info_card_text: 'scientific_name: [[scientific_name]]'
+info_card_text: '[[scientific_name]]'
 capture: true
-capture_dir: spectrograms
+capture_dir: output/spectrograms
 default_buffer: 0.5
 form_config: annotator_config/forms/api_detections.yaml

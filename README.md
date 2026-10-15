@@ -10,10 +10,10 @@ There are two workflows. Each has its own notebook, data folder and annotator co
 |---|---|---|
 | Notebook | `notebooks/01_review_API_detections.ipynb` | `notebooks/02_review_local_recordings.ipynb` |
 | What you review | A random sample of detections at sites you pick on a map | Your own audio files, whole or split into clips |
-| Audio comes from | S3, via the Wildlife Sound Hub API | `local_data/audio/` |
+| Audio comes from | S3, using your AWS keys (the API only gives the file paths) | `local_data/audio/` |
 | Needs | `.env` with an API token and AWS keys | Nothing |
 | Clip list | `detection_data/filtered_detections.csv` | `local_data/metadata.csv` |
-| Answers saved to | `output/api_reviews.csv` | `output/reviews_local_data.csv` |
+| Answers saved to | `output/api_reviews.csv` | `output/local_reviews.csv` |
 | Annotator config | `annotator_config/*/api_detections.yaml` | `annotator_config/*/local_data.yaml` |
 
 ```
@@ -27,7 +27,7 @@ pixi.toml             environment: Python, JupyterLab, ffmpeg, jupyter-bioacoust
 .devcontainer/        optional Docker setup for VS Code
 ```
 
-Git ignores `.env`, `local_data/`, `detection_data/` and `output/`. The notebooks create these folders when they run.
+Git ignores `.env` and the `local_data/`, `detection_data/` and `output/` folders. You create `.env` and `local_data/audio/` yourself (step 3 below). The notebooks and the annotator create the rest. Spectrogram images from the annotator's **Capture** button are saved in `output/spectrograms/`.
 
 **Species:** `species.csv` sets the species options in both forms. The forms read its `common_name` column, so edit or replace the file to review other species. It currently lists 33 California frog and toad species, plus 3 groups for species whose calls can't be told apart (`MYLF`, `PACH`, `WETO`). Each row also has a 4-letter code, the scientific name, native or non-native status, and aliases.
 
@@ -60,7 +60,7 @@ Optional: if you use VS Code and have Docker installed (on Windows, macOS or Lin
   ```
   If your AWS credentials are temporary, also add `AWS_SESSION_TOKEN=<...>`.
 
-**4. Run.** Navigate to the repo folder, run:
+**4. Run.** In a terminal, go to the repo folder and run:
 
 ```bash
 pixi run jupyter
@@ -71,13 +71,13 @@ The first run installs everything, which takes a few minutes. On Windows, Jupyte
 Then:
 
 1. Open a notebook in `notebooks/`.
-2. Set the options near the top:
-   - Notebook 01: `SPECIES_WORDS`, `MIN_CONFIDENCE`, `CLIPS_PER_SITE`. You also pick sites on the map.
-   - Notebook 02: `AUDIO_DIR`, and `CHUNK_SECONDS` to split recordings into clips.
-3. Run the cells from top to bottom. The annotator appears at the bottom and saves each answer as you go.
+2. Run the cells in order, setting the options as you reach them:
+   - Notebook 01: pick sites on the map in step 1, then set `SPECIES_WORDS`, `MIN_CONFIDENCE`, `CLIPS_PER_SITE` and `ONE_CLIP_PER_RECORDING` in step 2. **Run All** stops at step 2 if you haven't picked any sites yet.
+   - Notebook 02: set `AUDIO_DIR`, and `CHUNK_SECONDS` to split recordings into clips. Then run all the cells.
+3. The annotator appears at the bottom and saves each answer as you go.
 4. When you're done, press Ctrl+C in the terminal.
 
-The annotator only works in JupyterLab in a browser. It doesn't work in VS Code's notebook viewer. Annotations are output to a single file in outputs and overwritten with any additions or deletions, even when you stop a session and come back later.
+The annotator only works in JupyterLab in a browser. It doesn't work in VS Code's notebook viewer. Each workflow keeps its answers in one file in `output/`. The file updates as you add, change or delete answers, so they're still there when you stop and come back later.
 
 ## Troubleshooting
 

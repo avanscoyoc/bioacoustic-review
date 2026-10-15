@@ -9,22 +9,20 @@ version = "0.1.0"
 python = "3.12.*"
 jupyterlab = ">=4.6.4,<5"
 ipykernel = ">=7.4.0,<8"
-# audio (ffmpeg enables fast partial/byte-range reads in jupyter-bioacoustic & ondio)
+# audio (ffmpeg enables fast partial/byte-range reads in jupyter-bioacoustic)
 ffmpeg = "*"
-pytest = "*"
 python-dotenv = "*"
+requests = "*"
 plotly = ">=7.1.0,<8"
 anywidget = ">=0.11.0,<0.12"
 
 [pypi-dependencies]
 jupyter-bioacoustic = "*"
-ondio = "*"
 
 [tasks]
 # --allow-root: the dev container runs as root (remoteUser in devcontainer.json)
 # iopub_data_rate_limit: jupyter_bioacoustic sends audio as notebook output, which the 1 MB/s default cuts off
 jupyter = "jupyter lab --ip=0.0.0.0 --no-browser --allow-root --ServerApp.iopub_data_rate_limit=1e10"
-test = "pytest -q tests"
 
 [target.win-64.tasks]
 # Run natively on Windows: open the browser already logged in (no token to copy)

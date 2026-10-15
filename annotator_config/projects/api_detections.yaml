@@ -1,4 +1,4 @@
-project_name: api_detections
+project_name: API detections
 config: annotator_config/config/api_detections.yaml
 data:
   source_type: path
@@ -9,3 +9,4 @@ audio:
   value: path
 output:
   path: output/api_reviews.csv
+  index_column: id

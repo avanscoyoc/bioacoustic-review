@@ -1,6 +1,5 @@
 # Environment and secrets
-.pixi/*
-!.pixi/config.toml
+.pixi/
 .env
 
 # Data and results. The notebooks regenerate them, and the audio isn't ours to redistribute.
@@ -8,12 +7,12 @@
 /local_data/
 /output/
 
-# Audio and derived arrays, wherever they end up
-*.wav
-*.flac
-*.mp3
-*.m4a
-*.ogg
+# Audio and derived arrays, wherever they end up (audio in any case, e.g. .wav or .WAV)
+*.[wW][aA][vV]
+*.[fF][lL][aA][cC]
+*.[mM][pP]3
+*.[mM]4[aA]
+*.[oO][gG][gG]
 *.npy
 *.npz
 *.parquet

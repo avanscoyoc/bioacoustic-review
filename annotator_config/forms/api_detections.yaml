@@ -1,48 +1,36 @@
 title:
-  value: REVIEW DETECTION
+  value: Review detection
   progress_tracker: true
 pass_value:
   source_column: id
   column: detection_id
 form:
 - select:
-    label: Is [[common_name]] Valid?
+    label: Is [[common_name]] correct?
     column: is_valid
     required: true
     items:
-    - label: 'yes'
+    - label: 'Yes'
       value: 'yes'
       form: confirmed_form
-    - label: 'no'
+    - label: 'No'
       value: 'no'
       form: rejected_form
 dynamic_forms:
   confirmed_form:
   - select:
-      label: confidence
+      label: Your confidence
       column: reviewer_confidence
       items:
       - low
       - medium
       - high
   - textbox:
-      label: notes
+      label: Notes
       column: notes
   rejected_form:
   - select:
-      label: corrected species
-      column: corrected_common_name
-      required: true
-      items:
-        path: species.csv
-        value: common_name
-        filter_box: true
-        custom_value: true
-        not_available:
-          label: Unknown Species
-          value: unknown
-  - select:
-      label: rejection reason
+      label: Reason
       column: rejection_reason
       required: true
       items:
@@ -51,17 +39,28 @@ dynamic_forms:
       - overlapping signals
       - too faint
       - other
+  - select:
+      label: Species you hear
+      column: corrected_common_name
+      items:
+        path: species.csv
+        value: common_name
+        filter_box: true
+        custom_value: true
+        not_available:
+          label: Unknown species
+          value: unknown
   - number:
-      label: signal quality (1-5)
+      label: Signal quality (1-5)
       column: signal_quality
       min: 1
       max: 5
       step: 1
   - checkbox:
-      label: flag for expert review
+      label: Flag for expert review
       column: flagged
   - textbox:
-      label: notes
+      label: Notes
       column: notes
       multiline: true
 submission_buttons:
@@ -69,4 +68,4 @@ submission_buttons:
   next:
     label: Skip
   submit:
-    label: Verify
+    label: Submit

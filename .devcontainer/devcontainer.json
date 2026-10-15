@@ -4,7 +4,7 @@
     "dockerfile": "Dockerfile",
     "context": ".."
   },
-  // Work directly in the local repo folder (code + data/ persist on the host).
+  // Work directly in the local repo folder (code and data persist on the host).
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
   "workspaceFolder": "/workspace",
   // Linux pixi env lives in a Docker volume so it never clashes with a macOS .pixi on the host.
