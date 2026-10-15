@@ -17,4 +17,4 @@ info_card_text: 'scientific_name: [[scientific_name]]'
 capture: true
 capture_dir: spectrograms
 default_buffer: 0.5
-form_config: annotator_config/forms/cdfw_detections.yaml
+form_config: annotator_config/forms/api_detections.yaml

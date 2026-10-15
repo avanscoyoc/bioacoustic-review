@@ -1,5 +1,5 @@
-project_name: cdfw_detections
-config: annotator_config/config/cdfw_detections.yaml
+project_name: api_detections
+config: annotator_config/config/api_detections.yaml
 data:
   source_type: path
   value: detection_data/filtered_detections.csv
@@ -8,4 +8,4 @@ audio:
   source_type: column
   value: path
 output:
-  path: output/cdfw_reviews.csv
+  path: output/api_reviews.csv

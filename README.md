@@ -6,15 +6,15 @@ Notebooks for listening to wildlife recordings, checking BirdNET detections and 
 
 There are two workflows. Each has its own notebook, data folder and annotator config:
 
-| | 1. CDFW detections | 2. Local recordings |
+| | 1. API detections | 2. Local recordings |
 |---|---|---|
-| Notebook | `notebooks/01_review_CDFW_detections.ipynb` | `notebooks/02_review_local_recordings.ipynb` |
+| Notebook | `notebooks/01_review_API_detections.ipynb` | `notebooks/02_review_local_recordings.ipynb` |
 | What you review | A random sample of detections at sites you pick on a map | Your own audio files, whole or split into clips |
 | Audio comes from | S3, via the Wildlife Sound Hub API | `local_data/audio/` |
 | Needs | `.env` with an API token and AWS keys | Nothing |
 | Clip list | `detection_data/filtered_detections.csv` | `local_data/metadata.csv` |
-| Answers saved to | `output/cdfw_reviews.csv` | `output/reviews_local_data.csv` |
-| Annotator config | `annotator_config/*/cdfw_detections.yaml` | `annotator_config/*/local_data.yaml` |
+| Answers saved to | `output/api_reviews.csv` | `output/reviews_local_data.csv` |
+| Annotator config | `annotator_config/*/api_detections.yaml` | `annotator_config/*/local_data.yaml` |
 
 ```
 notebooks/            the two workflows
@@ -52,7 +52,7 @@ Another option on any OS with Docker, including Intel Macs (`pixi.toml` doesn't 
 **3. Add your data.**
 
 - **Local recordings:** create `local_data/audio/` and copy your audio into it (`.wav`, `.flac`, `.mp3` or `.ogg`; subfolders are fine). To use audio stored somewhere else, set `AUDIO_DIR` in the notebook instead.
-- **CDFW detections:** create a file named `.env` in the repo folder:
+- **API detections:** create a file named `.env` in the repo folder:
   ```
   API_TOKEN=<your __Secure-authjs.session-token cookie from Wildlife Sound Hub>
   AWS_ACCESS_KEY_ID=<your AWS access key>
