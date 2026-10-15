@@ -47,11 +47,11 @@ Without git, click **Code → Download ZIP** on GitHub and unzip it.
 - macOS or Linux: `curl -fsSL https://pixi.sh/install.sh | sh`
 - Windows (PowerShell): `powershell -ExecutionPolicy ByPass -c "irm -useb https://pixi.sh/install.ps1 | iex"`
 
-Another option on any OS with Docker, including Intel Macs (`pixi.toml` doesn't include them as a platform): open the folder in VS Code, click **Reopen in Container**, and skip this step. Inside the container, your audio has to be inside the repo folder.
+Optional: if you use VS Code and have Docker installed (on Windows, macOS or Linux), you can skip installing pixi and use the dev container instead. Open the folder in VS Code and click **Reopen in Container**; pixi is already set up inside it. Inside the container, your audio has to be inside the repo folder.
 
 **3. Add your data.**
 
-- **Local recordings:** create `local_data/audio/` and copy your audio into it (`.wav`, `.flac`, `.mp3` or `.ogg`; subfolders are fine). To use audio stored somewhere else, set `AUDIO_DIR` in the notebook instead.
+- **Local recordings:** create `local_data/audio/` and copy your audio into it (`.wav`, `.flac`, `.mp3` or `.ogg`; subfolders are fine). To use audio stored somewhere else, set `AUDIO_DIR` in the first code cell of notebook 02 instead. Write the path with `/`, even on Windows (e.g. `"D:/recordings"`).
 - **API detections:** create a file named `.env` in the repo folder:
   ```
   API_TOKEN=<your __Secure-authjs.session-token cookie from Wildlife Sound Hub>
