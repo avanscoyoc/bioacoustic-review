@@ -1,0 +1,34 @@
+form:
+- select:
+    label: Class
+    column: class
+    required: true
+    items:
+      path: /Users/amy/Desktop/bioacoustic-review/categories.csv
+      label: categories
+      filter_box: true
+      custom_value: true
+- annotation:
+    tools:
+    - multibox
+    - fixed_duration:
+        window: 3
+- checkbox:
+    label: Omit?
+    column: omit
+    checked_value: 'yes'
+    unchecked_value: 'no'
+- textbox:
+    label: notes
+    column: notes
+- select:
+    label: Quality
+    column: quality
+    items:
+    - high
+    - medium
+    - low
+submission_buttons:
+  previous: true
+  next: true
+  submit: true

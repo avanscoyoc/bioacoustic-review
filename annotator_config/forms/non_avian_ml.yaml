@@ -1,0 +1,15 @@
+form:
+- checkbox:
+    label: incorrect?
+    column: correct
+    checked_value: 'yes'
+    unchecked_value: 'no'
+    checked_form: wrong_annotation
+- textbox:
+    label: notes
+    column: notes
+dynamic_forms:
+  wrong_annotation:
+  - textbox:
+      label: revised_annotation
+      column: revised_annotation

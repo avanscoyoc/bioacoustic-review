@@ -1,0 +1,11 @@
+project_name: non-avian-ml
+config: annotator_config/config/non_avian_ml.yaml
+data:
+  source_type: path
+  value: listening_shortlist.csv
+audio:
+  source_type: column
+  value: path
+  prefix: /Users/Amy/Desktop
+output:
+  path: output/non-avian-ml-review.csv

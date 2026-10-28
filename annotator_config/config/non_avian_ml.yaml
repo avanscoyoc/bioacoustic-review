@@ -1,0 +1,14 @@
+capture: true
+data:
+  index_column: filename
+output:
+  index_column: filename
+display_columns:
+- filename
+- path
+- disagree
+- confused_with
+- recording_clips
+- recording_flagged
+- models_confused
+form_config: annotator_config/forms/non_avian_ml.yaml

@@ -1,0 +1,11 @@
+project_name: new-data
+config: ../annotator_config/config/new_data.yaml
+data:
+  source_type: path
+  value: detection_data/filtered_detections.csv
+  index_column: id
+audio:
+  source_type: column
+  value: id
+output:
+  index_column: id
