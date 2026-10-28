@@ -1,0 +1,138 @@
+title:
+  value: Label frog calls
+  progress_tracker: true
+
+form:
+- annotation:
+    start_time:
+      label: window start
+      column: window_start
+    end_time:
+      label: window end
+      column: window_end
+    tools:
+    - fixed_duration:
+        window: 3
+- select:
+    label: Any frog call in the window?
+    column: frog_in_window
+    required: true
+    items:
+    - label: 'Yes'
+      value: 'yes'
+      form: yes_form
+    - label: 'No'
+      value: 'no'
+      form: no_form
+    - label: Unsure
+      value: unsure
+      form: unsure_form
+    - label: Recording unusable
+      value: unusable
+- textbox:
+    label: Notes
+    column: notes
+    multiline: true
+
+dynamic_forms:
+  yes_form:
+  - select:
+      label: Species 1
+      column: species_1
+      required: true
+      items:
+        path: species.csv
+        value: common_name
+        filter_box: true
+        not_available:
+          label: Unknown frog
+          value: unknown_frog
+  - select:
+      label: Species 2 (optional)
+      column: species_2
+      items:
+        path: species.csv
+        value: common_name
+        filter_box: true
+        not_available:
+          label: Unknown frog
+          value: unknown_frog
+  - select:
+      label: Species 3 (optional)
+      column: species_3
+      items:
+        path: species.csv
+        value: common_name
+        filter_box: true
+        not_available:
+          label: Unknown frog
+          value: unknown_frog
+  - select:
+      label: Calling index
+      column: calling_index
+      required: true
+      items:
+      - '1': 1 · calls countable, no overlap
+      - '2': 2 · calls overlap, callers still countable
+      - '3': 3 · full chorus, callers not countable
+  - select:
+      label: Clearest call is
+      column: clarity
+      required: true
+      items: [clear, faint]
+  - select:
+      label: Call type (optional)
+      column: call_type
+      items: [advertisement, aggressive or territorial, release, distress, not sure]
+  - select:
+      label: Another species calling outside the window (optional)
+      column: species_outside
+      items:
+        path: species.csv
+        value: common_name
+        filter_box: true
+        not_available:
+          label: Unknown frog
+          value: unknown_frog
+
+  no_form:
+  - text: Tick every other sound you hear. Leave all blank if it is quiet.
+  - checkbox:
+      label: Insects
+      column: insects
+  - checkbox:
+      label: Birds or mammals
+      column: birds_mammals
+  - checkbox:
+      label: Rain
+      column: rain
+  - checkbox:
+      label: Wind
+      column: wind
+  - checkbox:
+      label: Flowing water
+      column: water
+  - checkbox:
+      label: Voices, traffic or machinery
+      column: human
+  - checkbox:
+      label: Handling or microphone noise
+      column: handling
+
+  unsure_form:
+  - select:
+      label: Why unsure?
+      column: unsure_reason
+      required: true
+      items:
+      - too faint
+      - call cut off at the segment edge
+      - might not be a frog
+      - masked by noise
+      - other (explain in notes)
+
+submission_buttons:
+  line: true
+  previous: true
+  submit:
+    label: Submit
