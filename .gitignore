@@ -6,6 +6,7 @@
 /detection_data/
 /local_data/
 /output/
+/exports/
 
 # Audio and derived arrays, wherever they end up (audio in any case, e.g. .wav or .WAV)
 *.[wW][aA][vV]

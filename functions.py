@@ -1,13 +1,21 @@
 """Sampling, clipping, label checks and export for the frog labeling workflow.
 
 Collaborator (notebooks/03_frog_sampling.ipynb):
-    load_config -> build_inventory -> choose_nights or pick_nights_widget
-    -> sample_segments (also cuts the 10 s clips) -> label -> check_labels -> export_source
+    load_config -> sample (inventory, segments, clips) -> annotate
+    -> add_round (only if needed) -> export_source
+
+Sampling, per site and round: segments_per_site random clips, spread over as many
+recordings as possible. Every recording gets one clip before any gets a second;
+recordings are picked spread across time (or file names, when there's no time).
+Each clip is a random start inside HOURS and MONTHS (when the recording has a time),
+at least min_gap_seconds from other clips in the same recording.
 
 Project lead:
     ingest_source (one call per received zip) -> build_dataset (one merged, labeled table)
 
-Every path is relative to the repo folder; the notebooks change into it first.
+Everything made for a dataset goes in exports/<source>/ (segments, clips, labels, settings),
+so exporting is just zipping that folder. Every path is relative to the repo folder; the
+notebooks change into it first.
 """
 from __future__ import annotations
 
@@ -24,44 +32,30 @@ import pandas as pd
 import soundfile as sf
 import yaml
 
-# Fixed locations, shared with annotator_config/projects/frogs.yaml
-WORK_DIR = Path("local_data")
-INVENTORY_CSV = WORK_DIR / "inventory.csv"
-SITES_CSV = WORK_DIR / "sites.csv"
-SELECTION_CSV = WORK_DIR / "selection.csv"
-SEGMENTS_CSV = WORK_DIR / "segments.csv"  # the annotator loads this file
-LOCK_YAML = WORK_DIR / "source.yaml"
-CLIP_DIR = WORK_DIR / "clips"
-LABELS_GLOB = "output/frog_labels_*.csv"  # the annotator writes these files
+DESIGN_YAML = Path("frogs.yaml")  # sampling design, set by the project lead
+ANNOTATOR_YAML = "annotator_config/config/frogs.yaml"  # views, instructions and form; paths are set in annotate()
+EXPORTS_DIR = Path("exports")  # one folder per SOURCE; the audio folder is only ever read
+
+# File names inside exports/<source>/
+INVENTORY_CSV = "inventory.csv"
+SEGMENTS_CSV = "segments.csv"  # the annotator loads this file
+LOCK_YAML = "source.yaml"
+CLIP_DIR = "clips"
+LABEL_DIR = "labels"  # the annotator writes frog_labels_<initials>.csv here
 
 AUDIO_EXTENSIONS = {".wav", ".flac", ".mp3", ".ogg"}
 SEP = "__"  # joins the parts of an ID: source__site__recording__s000000
 WINDOW_SECONDS = 3.0
 HIGH_RES_SUBTYPES = {"PCM_24", "PCM_32", "FLOAT", "DOUBLE"}
+MIN_RECORDINGS = 5  # warn when a site's clips come from fewer recordings than this
 
-DEFAULTS = {
-    "source": None,
-    "contributor": "",
-    "audio_dir": "local_data/audio",
-    "path_pattern": "{site}/{_}",
-    "recording_time": {"format": "%Y%m%d_%H%M%S", "file_timezone": "UTC", "local_timezone": "UTC"},
-    "night_starts_at": 12,
-    "pick_nights": "auto",
-    "nights_per_site": 5,
-    "segments_per_night": 5,
-    "segment_seconds": 10,
-    "min_gap_seconds": 60,
-    "max_segments_per_site": 75,
-    "seed": 0,
-    "focus": {"hours": None, "months": None},
-}
+DESIGN_KEYS = ["segments_per_site", "segment_seconds", "min_gap_seconds", "max_segments_per_site", "seed"]
 # Settings that decide which segments exist. They can't change once sampling has started.
-LOCKED_KEYS = ["source", "path_pattern", "recording_time", "night_starts_at",
-               "segments_per_night", "segment_seconds", "min_gap_seconds", "seed"]
+LOCKED_KEYS = ["source", "path_pattern", "recording_time", "sites", "hours", "months",
+               "segment_seconds", "min_gap_seconds", "seed"]
 
 SEGMENT_COLUMNS = ["seq", "id", "path", "start_time", "end_time", "source", "site", "recording",
-                   "night", "source_path", "offset_s", "local_time", "sample_rate", "round",
-                   "block", "placement", "night_choice", "focused"]
+                   "source_path", "offset_s", "local_time", "sample_rate", "round"]
 LABEL_COLUMNS = ["frog_in_window", "window_start", "window_end", "species_1", "species_2",
                  "species_3", "calling_index", "clarity", "call_type", "species_outside",
                  "insects", "birds_mammals", "rain", "wind", "water", "human", "handling",
@@ -70,49 +64,91 @@ LABEL_COLUMNS = ["frog_in_window", "window_start", "window_end", "species_1", "s
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 
-def load_config(path: str) -> dict:
-    """Read the sampling config, fill in defaults and stop on anything invalid."""
-    with open(path) as f:
-        user = yaml.safe_load(f) or {}
-    cfg = {**DEFAULTS, **user}
-    for key in ("recording_time", "focus"):
-        cfg[key] = {**DEFAULTS[key], **(user.get(key) or {})}
+def load_config(source: str, contributor: str, audio_dir: str, path_pattern: str,
+                time_format: str | None, file_timezone: str, local_timezone: str,
+                sites: list | None = None, hours: list | None = None, months: list | None = None) -> dict:
+    """Combine the notebook's step 1 settings with the sampling design in frogs.yaml.
 
-    errors = []
-    if not cfg["source"] or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", str(cfg["source"])):
-        errors.append("source: use lowercase letters, digits and hyphens, e.g. 'ucb-ponds'")
-    if "{site}" not in cfg["path_pattern"]:
-        errors.append("path_pattern: must contain {site}")
-    if not Path(cfg["audio_dir"]).is_dir():
-        errors.append(f"audio_dir: folder not found: {Path(cfg['audio_dir']).resolve()}")
-    if cfg["pick_nights"] not in ("auto", "manual"):
-        errors.append("pick_nights: use auto or manual")
-    for key in ("nights_per_site", "segments_per_night", "segment_seconds", "max_segments_per_site"):
-        if not isinstance(cfg[key], int) or cfg[key] < 1:
-            errors.append(f"{key}: must be a whole number of 1 or more")
-    if not isinstance(cfg["min_gap_seconds"], (int, float)) or cfg["min_gap_seconds"] < 0:
-        errors.append("min_gap_seconds: must be 0 or more")
-    if cfg["segment_seconds"] < WINDOW_SECONDS:
-        errors.append(f"segment_seconds: must be at least {WINDOW_SECONDS:g}")
+    Stops on anything invalid, saying where to fix it.
+    """
+    design = yaml.safe_load(DESIGN_YAML.read_text()) or {}
+
+    errors = []  # in the notebook
+    if not source or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", str(source)):
+        errors.append("SOURCE: use lowercase letters, digits and hyphens, e.g. 'ucb-ponds'")
+    if not str(contributor or "").strip():
+        errors.append("CONTRIBUTOR: enter your name")
+    if not Path(audio_dir).is_dir():
+        errors.append(f"AUDIO_DIR: folder not found: {Path(audio_dir).resolve()}")
+    if "{site}" not in str(path_pattern):
+        errors.append("PATH_PATTERN: must contain {site}")
+    for name, tz in (("FILE_TIMEZONE", file_timezone), ("LOCAL_TIMEZONE", local_timezone)):
+        if name == "FILE_TIMEZONE" and str(tz).lower() == "local":
+            continue
+        try:
+            pd.Timestamp(0).tz_localize(tz or "")
+        except Exception:
+            errors.append(f"{name}: use a time zone name such as 'America/Los_Angeles' (got {tz!r})")
+    for name, values, lo, hi in (("HOURS", hours, 0, 23), ("MONTHS", months, 1, 12)):
+        if values is not None and not (isinstance(values, (list, tuple)) and len(values)
+                                       and all(isinstance(v, int) and lo <= v <= hi for v in values)):
+            errors.append(f"{name}: use a list of whole numbers from {lo} to {hi}, or None for all")
+    if sites is not None and not (isinstance(sites, (list, tuple)) and len(sites)
+                                  and all(isinstance(s, str) and s.strip() for s in sites)):
+        errors.append('SITES: use a list of site names, e.g. ["POND3", "POND7"], or None for all')
+
+    design_errors = []  # in frogs.yaml
+    missing = [k for k in DESIGN_KEYS if k not in design]
+    if missing:
+        design_errors.append("missing: " + ", ".join(missing))
+    else:
+        for key in ("segments_per_site", "segment_seconds", "max_segments_per_site"):
+            if not isinstance(design[key], int) or design[key] < 1:
+                design_errors.append(f"{key}: must be a whole number of 1 or more")
+        if not isinstance(design["min_gap_seconds"], (int, float)) or design["min_gap_seconds"] < 0:
+            design_errors.append("min_gap_seconds: must be 0 or more")
+        if design["segment_seconds"] < WINDOW_SECONDS:
+            design_errors.append(f"segment_seconds: must be at least {WINDOW_SECONDS:g}")
+
+    msg = []
     if errors:
-        raise ValueError("Fix these settings in " + path + ":\n  " + "\n  ".join(errors))
-    return cfg
+        msg.append("Fix these settings in step 1 of the notebook:\n  " + "\n  ".join(errors))
+    if design_errors:
+        msg.append(f"Fix these settings in {DESIGN_YAML}:\n  " + "\n  ".join(design_errors))
+    if msg:
+        raise ValueError("\n".join(msg))
+    return {**design, "source": source, "contributor": contributor, "audio_dir": audio_dir,
+            "path_pattern": path_pattern,
+            "recording_time": {"format": time_format or None, "file_timezone": file_timezone,
+                               "local_timezone": local_timezone},
+            "sites": sorted({_clean(s) for s in sites}) if sites else None,  # sorted, so the lock compares sets
+            "hours": sorted(set(hours)) if hours else None,
+            "months": sorted(set(months)) if months else None}
+
+
+def _dir(cfg: dict) -> Path:
+    """exports/<source>/: everything the workflow makes for this SOURCE."""
+    return EXPORTS_DIR / cfg["source"]
+
+
+def _label_files(cfg: dict) -> list:
+    return sorted((_dir(cfg) / LABEL_DIR).glob("*.csv"))
 
 
 def _check_lock(cfg: dict, have_segments: bool) -> None:
     """Refuse to sample if a locked setting changed after the first round."""
     locked = {k: cfg[k] for k in LOCKED_KEYS}
-    if have_segments and LOCK_YAML.exists():
-        stored = (yaml.safe_load(LOCK_YAML.read_text()) or {}).get("locked", {})
+    lock = _dir(cfg) / LOCK_YAML
+    if have_segments and lock.exists():
+        stored = (yaml.safe_load(lock.read_text()) or {}).get("locked", {})
         changed = [k for k in LOCKED_KEYS if k in stored and stored[k] != locked[k]]
         if changed:
             raise ValueError(
                 f"These settings changed after sampling started: {', '.join(changed)}.\n"
-                f"Change them back to the values in {LOCK_YAML}. To start over instead, "
-                f"move {WORK_DIR}/segments.csv, selection.csv, source.yaml and clips/ somewhere else.")
+                f"Change them back to the values in {lock}, or use a new SOURCE to start over.")
         return
-    WORK_DIR.mkdir(parents=True, exist_ok=True)
-    LOCK_YAML.write_text(yaml.safe_dump(
+    (_dir(cfg) / LABEL_DIR).mkdir(parents=True, exist_ok=True)
+    lock.write_text(yaml.safe_dump(
         {"source": cfg["source"], "contributor": cfg["contributor"],
          "created": date.today().isoformat(), "locked": locked}, sort_keys=False))
 
@@ -163,7 +199,7 @@ def _parse_time(stem: str, fmt: str | None, rx: re.Pattern | None):
 
 
 def build_inventory(cfg: dict) -> pd.DataFrame:
-    """List every audio file, read site and time from its path, and group files into nights."""
+    """List every audio file at the chosen SITES and read site and local start time from its path."""
     root = Path(cfg["audio_dir"])
     rx = _pattern_regex(cfg["path_pattern"])
     tcfg = cfg["recording_time"]
@@ -209,276 +245,113 @@ def build_inventory(cfg: dict) -> pd.DataFrame:
         raise ValueError("These files would get the same recording ID:\n"
                          + "\n".join(still.source_path.head(10)))
 
-    # Recorder clock -> local time, then group into nights (before noon = previous night)
+    if cfg["sites"]:
+        unknown = sorted(set(cfg["sites"]) - set(inv.site))
+        if unknown:
+            raise ValueError(f"SITES: not found in AUDIO_DIR: {', '.join(unknown)}. "
+                             f"Sites found: {', '.join(sorted(inv.site.unique()))}")
+        print(f"Sampling {len(cfg['sites'])} of {inv.site.nunique()} sites (SITES)")
+        inv = inv[inv.site.isin(cfg["sites"])]
+
+    # Recorder clock -> local time
     t = pd.to_datetime(inv.start_file_time)
     if t.notna().any():
         local_tz = tcfg["local_timezone"]
         file_tz = local_tz if str(tcfg["file_timezone"]).lower() == "local" else tcfg["file_timezone"]
         t = (t.dt.tz_localize(file_tz, ambiguous="NaT", nonexistent="shift_forward")
              .dt.tz_convert(local_tz).dt.tz_localize(None))
-    inv["start_local"] = t
-    shifted = t - pd.Timedelta(hours=cfg["night_starts_at"])
-    inv["night"] = np.where(t.notna(), shifted.dt.strftime("%Y%m%d"), "file-" + inv.recording)
-    inv = inv.drop(columns=["start_file_time"]).sort_values(["site", "night", "start_local", "source_path"])
-    inv = inv.reset_index(drop=True)
+    inv = inv.assign(start_local=t).drop(columns=["start_file_time"])
+    # Time order within each site; recordings with no time follow, in file-name order
+    inv = inv.sort_values(["site", "start_local", "source_path"]).reset_index(drop=True)
 
-    WORK_DIR.mkdir(parents=True, exist_ok=True)
-    inv.to_csv(INVENTORY_CSV, index=False)
-    _update_sites_template(inv.site.unique())
+    _dir(cfg).mkdir(parents=True, exist_ok=True)
+    inv.to_csv(_dir(cfg) / INVENTORY_CSV, index=False)
 
     summary = inv.groupby("site").agg(
-        files=("source_path", "size"), nights=("night", "nunique"),
-        hours=("duration_s", lambda d: round(d.sum() / 3600, 1)),
+        files=("source_path", "size"), hours=("duration_s", lambda d: round(d.sum() / 3600, 1)),
         with_time=("start_local", lambda s: f"{s.notna().mean():.0%}"),
         pattern_ok=("pattern_ok", lambda s: f"{s.mean():.0%}"))
-    print(f"{len(inv)} recordings at {inv.site.nunique()} sites -> {INVENTORY_CSV}")
+    print(f"{len(inv)} recordings at {inv.site.nunique()} sites -> {_dir(cfg) / INVENTORY_CSV}")
     if unreadable:
         print(f"Skipped {len(unreadable)} unreadable or empty files, e.g. {unreadable[0]}")
     if not inv.pattern_ok.all():
         print(f"{(~inv.pattern_ok).sum()} files don't match path_pattern; their site is the top folder name. "
               f"Example: {inv.loc[~inv.pattern_ok, 'source_path'].iloc[0]}")
+    too_short = (inv.duration_s < cfg["segment_seconds"]).sum()
+    if too_short:
+        print(f"{too_short} files are shorter than {cfg['segment_seconds']} s, so no segments can come from them.")
     if inv.start_local.isna().any():
-        print(f"{inv.start_local.isna().sum()} files have no time in their name; each is treated as its own night.")
+        note = " HOURS and MONTHS can't apply to them." if cfg["hours"] or cfg["months"] else ""
+        print(f"{inv.start_local.isna().sum()} files have no time in their name, so they're ordered by "
+              f"file name instead of time.{note}")
     print(summary.to_string())
     return inv
 
 
-def _update_sites_template(sites) -> None:
-    cols = ["site", "lat", "lon", "habitat", "notes"]
-    old = pd.read_csv(SITES_CSV, dtype=str) if SITES_CSV.exists() else pd.DataFrame(columns=cols)
-    new = pd.DataFrame({"site": [s for s in sites if s not in set(old.site)]})
-    if len(new):
-        pd.concat([old, new], ignore_index=True)[cols].to_csv(SITES_CSV, index=False)
-        print(f"Fill in coordinates and habitat for {len(new)} new sites in {SITES_CSV}")
-
-
-def _load_inventory(inv: pd.DataFrame | None = None) -> pd.DataFrame:
-    if inv is None:
-        inv = pd.read_csv(INVENTORY_CSV)
+def _load_inventory(inv: pd.DataFrame) -> pd.DataFrame:
     inv = inv.copy()
     inv["start_local"] = pd.to_datetime(inv.start_local)
-    inv["night"] = inv.night.astype(str)
     return inv
-
-
-# ─── Choosing nights ─────────────────────────────────────────────────────────
-
-def _existing():
-    seg = (pd.read_csv(SEGMENTS_CSV, dtype={"night": str}) if SEGMENTS_CSV.exists()
-           else pd.DataFrame(columns=SEGMENT_COLUMNS))
-    sel = (pd.read_csv(SELECTION_CSV, dtype={"night": str}) if SELECTION_CSV.exists()
-           else pd.DataFrame(columns=["site", "night", "round", "night_choice"]))
-    return seg, sel
-
-
-def _spread(items: list, k: int) -> list:
-    """k items spread evenly through a sorted list."""
-    if k <= 0:
-        return []
-    if len(items) <= k:
-        return list(items)
-    idx = np.unique(np.round(np.linspace(0, len(items) - 1, k)).astype(int))
-    return [items[i] for i in idx]
-
-
-def _night_table(inv: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    """One row per site and night: hours, files, month, and whether focus allows it."""
-    nights = inv.groupby(["site", "night"], as_index=False).agg(
-        hours=("duration_s", lambda d: d.sum() / 3600), files=("source_path", "size"),
-        start=("start_local", "min"))
-    months = cfg["focus"]["months"]
-    nights["in_focus"] = True
-    if months:
-        nights["in_focus"] = nights.start.dt.month.isin(months).fillna(False)
-    return nights
-
-
-def choose_nights(inv: pd.DataFrame, cfg: dict, new_round: bool = False) -> pd.DataFrame | None:
-    """Pick nights for the next round, spread evenly across each site's deployment.
-
-    Skips nights used in earlier rounds. If a site has no unused nights left, reuses
-    old nights ('refill'): new segments then go in the gaps between earlier ones.
-    """
-    inv = _load_inventory(inv)
-    seg, sel = _existing()
-    if len(seg) and not new_round:
-        print(f"Already sampled (round {int(seg['round'].max())}, {len(seg)} segments). "
-              "To add more, use 'Sample another round' at the end of the notebook.")
-        return None
-    rnd = int(seg["round"].max()) + 1 if len(seg) else 1
-    per_night, cap = cfg["segments_per_night"], cfg["max_segments_per_site"]
-    nights = _night_table(inv, cfg)
-
-    picks = []
-    for site, g in nights.groupby("site"):
-        room = cap - int((seg.site == site).sum())
-        k = min(cfg["nights_per_site"], room // per_night)
-        if k <= 0:
-            print(f"{site}: reached max_segments_per_site ({cap}). Skipped.")
-            continue
-        g = g[g.in_focus].sort_values(["start", "night"])
-        used = set(sel.loc[sel.site == site, "night"])
-        fresh = [n for n in g.night if n not in used]
-        chosen = [(n, "auto") for n in _spread(fresh, k)]
-        if len(chosen) < k:
-            old = [n for n in g.night if n in used]
-            chosen += [(n, "refill") for n in _spread(old, k - len(chosen))]
-        if len(chosen) < k:
-            print(f"{site}: only {len(chosen)} of {k} nights available")
-        picks += [{"site": site, "night": n, "round": rnd, "night_choice": c} for n, c in chosen]
-    out = pd.DataFrame(picks, columns=["site", "night", "round", "night_choice"])
-    print(f"Round {rnd}: {len(out)} nights at {out.site.nunique()} sites")
-    return out
-
-
-class NightPicker:
-    """Checkbox picker for nights, one site at a time, pre-filled with the automatic choice."""
-
-    def __init__(self, inv: pd.DataFrame, cfg: dict, new_round: bool = False):
-        import ipywidgets as w
-        self.confirmed = False
-        self.auto = choose_nights(inv, cfg, new_round)
-        if self.auto is None:
-            self.widget = w.HTML("<b>Already sampled.</b> Nothing to pick.")
-            return
-        self.round = int(self.auto["round"].iloc[0]) if len(self.auto) else 1
-        self.target = cfg["nights_per_site"]
-        _, sel = _existing()
-        nights = _night_table(_load_inventory(inv), cfg)
-        nights = nights[nights.in_focus].sort_values(["site", "start", "night"])
-        self.used = {(r.site, r.night) for r in sel.itertuples()}
-        self.nights = {s: g for s, g in nights.groupby("site")}
-        self.picked = {s: set(self.auto.loc[self.auto.site == s, "night"]) for s in self.nights}
-
-        self.site = w.Dropdown(options=list(self.nights), description="Site")
-        self.boxes = w.VBox(layout=w.Layout(max_height="320px", overflow_y="auto"))
-        self.status = w.HTML()
-        auto_btn, clear_btn = w.Button(description="Auto-pick this site"), w.Button(description="Clear this site")
-        done_btn = w.Button(description="Use these nights", button_style="success")
-        auto_btn.on_click(lambda _: self._set(set(self.auto.loc[self.auto.site == self.site.value, "night"])))
-        clear_btn.on_click(lambda _: self._set(set()))
-        done_btn.on_click(self._confirm)
-        self.site.observe(lambda _: self._draw(), names="value")
-        self.widget = w.VBox([w.HTML(f"<b>Round {self.round}:</b> tick {self.target} nights per site, "
-                                     "spread across the deployment. Grey = used in an earlier round."),
-                              self.site, self.boxes, w.HBox([auto_btn, clear_btn, done_btn]), self.status])
-        self._draw()
-
-    def _set(self, nights: set) -> None:
-        self.picked[self.site.value] = nights
-        self._draw()
-
-    def _toggle(self, change, night):
-        s = self.picked[self.site.value]
-        s.add(night) if change["new"] else s.discard(night)
-        self._status()
-
-    def _draw(self) -> None:
-        import ipywidgets as w
-        site, boxes = self.site.value, []
-        for r in self.nights[site].itertuples():
-            label = (f"{r.night[:4]}-{r.night[4:6]}-{r.night[6:]}" if r.night[:1].isdigit() else r.night)
-            used = (site, r.night) in self.used
-            cb = w.Checkbox(value=r.night in self.picked[site], indent=False,
-                            description=f"{label} · {r.hours:.1f} h · {r.files} file(s)" + (" · used" if used else ""),
-                            layout=w.Layout(width="auto"),
-                            style={"description_width": "initial", "text_color": "grey" if used else None})
-            cb.observe(lambda c, n=r.night: self._toggle(c, n), names="value")
-            boxes.append(cb)
-        self.boxes.children = boxes
-        self._status()
-
-    def _status(self) -> None:
-        site = self.site.value
-        picked = sorted(self.picked[site])
-        notes = []
-        if len(picked) != self.target:
-            notes.append(f"{len(picked)} of {self.target} nights ticked")
-        days = pd.to_datetime([n for n in picked if n[:1].isdigit()], format="%Y%m%d")
-        if len(days) > 1 and (np.diff(days.sort_values()).astype("timedelta64[D]").astype(int) == 1).any():
-            notes.append("some nights are consecutive: spread them out if you can")
-        total = sum(len(v) for v in self.picked.values())
-        self.status.value = (f"{site}: " + ("; ".join(notes) if notes else "ok")
-                             + f"<br>All sites: {total} nights" + (" · <b>confirmed</b>" if self.confirmed else ""))
-
-    def _confirm(self, _=None) -> None:
-        self.confirmed = True
-        self._status()
-
-    def selection(self) -> pd.DataFrame | None:
-        """The ticked nights, once 'Use these nights' has been clicked."""
-        if self.auto is None:
-            return None
-        if not self.confirmed:
-            raise RuntimeError("Tick nights above and click 'Use these nights', then run this cell again.")
-        rows = []
-        for site, nights in self.picked.items():
-            auto = set(self.auto.loc[self.auto.site == site, "night"])
-            for n in sorted(nights):
-                choice = "refill" if (site, n) in self.used else ("auto" if nights == auto else "manual")
-                rows.append({"site": site, "night": n, "round": self.round, "night_choice": choice})
-        return pd.DataFrame(rows, columns=["site", "night", "round", "night_choice"])
-
-    def _ipython_display_(self):
-        from IPython.display import display
-        display(self.widget)
-
-
-def pick_nights_widget(inv: pd.DataFrame, cfg: dict, new_round: bool = False) -> NightPicker:
-    """Show the night picker. Read the result with .selection() after clicking 'Use these nights'."""
-    return NightPicker(inv, cfg, new_round)
 
 
 # ─── Sampling segments ───────────────────────────────────────────────────────
 
-def _place(files: pd.DataFrame, n: int, seg_len: float, spacing: float,
-           taken: dict, rng: np.random.Generator, hours) -> tuple[list, str]:
-    """Choose up to n segment starts in one night.
+def _existing(cfg: dict) -> pd.DataFrame:
+    seg_csv = _dir(cfg) / SEGMENTS_CSV
+    return (pd.read_csv(seg_csv) if seg_csv.exists() else pd.DataFrame(columns=SEGMENT_COLUMNS))
 
-    The night's files form one timeline split into n equal blocks, with one random
-    segment per block. Each block keeps `spacing` seconds clear before the next one,
-    so segments in the same file are always at least `spacing` apart. Nights too
-    short for that (e.g. one 5-minute file) get evenly spaced segments instead.
+
+def _pick_spread(items: list, k: int, rng: np.random.Generator) -> list:
+    """k items from an ordered list: split it into k equal groups and pick one at random from each."""
+    if len(items) <= k:
+        return list(items)
+    return [items[rng.choice(g)] for g in np.array_split(np.arange(len(items)), k)]
+
+
+def _starts(f, seg_len: float, spacing: float, taken: list, hours, months) -> np.ndarray:
+    """Every whole-second start where a clip fits in recording f.
+
+    Leaves out starts within `spacing` of its earlier clips (`taken`) and, if the
+    recording has a time, starts outside `hours` and `months`.
     """
-    glob, fidx, offs, cum = [], [], [], 0.0
-    for i, f in enumerate(files.itertuples()):
-        o = np.arange(0, int(np.floor(f.duration_s - seg_len)) + 1)
-        for e in taken.get(f.recording, []):  # earlier rounds
-            o = o[np.abs(o - e) >= spacing]
+    o = np.arange(0, int(np.floor(f.duration_s - seg_len)) + 1)  # empty if the file is too short
+    for e in taken:
+        o = o[np.abs(o - e) >= spacing]
+    if (hours or months) and pd.notna(f.start_local):
+        t = f.start_local + pd.to_timedelta(o, unit="s")
+        keep = np.ones(len(o), bool)
         if hours:
-            if pd.isna(f.start_local):
-                o = o[:0]
-            else:
-                o = o[np.isin((f.start_local + pd.to_timedelta(o, unit="s")).hour, hours)]
-        glob.append(cum + o), fidx.append(np.full(len(o), i)), offs.append(o)
-        cum += f.duration_s
-    glob, fidx, offs = np.concatenate(glob), np.concatenate(fidx), np.concatenate(offs)
-    if not len(glob):
-        return [], "none"
+            keep &= np.isin(t.hour, hours)
+        if months:
+            keep &= np.isin(t.month, months)
+        o = o[keep]
+    return o
 
-    def free(chosen):
-        ok = np.ones(len(glob), bool)
-        for _, c in chosen:
-            ok &= ~((fidx == fidx[c]) & (np.abs(offs - offs[c]) < spacing))
-        return ok
 
-    edges = np.linspace(0, cum, n + 1)
-    strat = []
-    for b in range(n):
-        hi = edges[b + 1] - (spacing if b < n - 1 else 0)
-        ok = np.flatnonzero((glob >= edges[b]) & (glob <= hi) & free(strat))
-        if len(ok):
-            strat.append((b, int(rng.choice(ok))))
+def _sample_site(files: pd.DataFrame, n: int, seg_len: float, spacing: float, taken: dict,
+                 rng: np.random.Generator, hours, months) -> list:
+    """Choose up to n clips at one site, as (file index, offset), over as many recordings as possible.
 
-    even = []
-    for b, t in enumerate(np.linspace(glob.min(), glob.max(), n)):
-        ok = np.flatnonzero(free(even))
-        if not len(ok):
-            break
-        even.append((b, int(ok[np.argmin(np.abs(glob[ok] - t))])))
-
-    best, how = (strat, "stratified") if len(strat) >= len(even) else (even, "even")
-    return [(b, int(fidx[c]), int(offs[c])) for b, c in best], how
+    `files` is in time order (or file-name order). Each pass gives one more clip to the
+    recordings with the fewest clips so far, counting earlier rounds. When more of them
+    are open than clips are still needed, one is picked at random from each of that many
+    equal groups, so the picks spread across the deployment.
+    """
+    starts = [_starts(f, seg_len, spacing, taken.get(f.recording, []), hours, months)
+              for f in files.itertuples()]
+    count = [len(taken.get(r, [])) for r in files.recording]
+    chosen = []
+    while len(chosen) < n:
+        open_ = [i for i in range(len(files)) if len(starts[i])]
+        if not open_:
+            break  # no recording has room for another clip
+        fewest = min(count[i] for i in open_)
+        for i in _pick_spread([i for i in open_ if count[i] == fewest], n - len(chosen), rng):
+            off = int(rng.choice(starts[i]))
+            chosen.append((i, off))
+            count[i] += 1
+            starts[i] = starts[i][np.abs(starts[i] - off) >= spacing]
+    return chosen
 
 
 def _check_segments(seg: pd.DataFrame, spacing: float) -> None:
@@ -491,62 +364,64 @@ def _check_segments(seg: pd.DataFrame, spacing: float) -> None:
             raise ValueError(f"Segments closer than {spacing:g} s in {site}/{rec}")
 
 
-def sample_segments(cfg: dict, inv: pd.DataFrame, nights: pd.DataFrame | None,
-                    new_round: bool = False, force: bool = False) -> pd.DataFrame:
-    """Sample segments in the chosen nights, cut their clips, and append them to segments.csv.
+def _check_labeled(cfg: dict, seg: pd.DataFrame) -> None:
+    """Stop if the last round still has unlabeled segments."""
+    last = int(seg["round"].max())
+    todo = seg[(seg["round"] == last) & ~seg.id.isin(_load_labels(_label_files(cfg)).id)]
+    if len(todo):
+        raise RuntimeError(f"Round {last} still has {len(todo)} unlabeled segments. Label them in step 2 first.")
+
+
+def sample_segments(cfg: dict, inv: pd.DataFrame, new_round: bool = False, force: bool = False) -> pd.DataFrame:
+    """Sample a round of clips at every site, cut them, and append them to segments.csv.
 
     Without new_round, an existing segments.csv is returned unchanged, so rerunning
     the notebook never adds segments by accident. With new_round, the previous round
     must be fully labeled first (or force=True).
     """
-    seg_old, sel_old = _existing()
+    d = _dir(cfg)
+    seg_old = _existing(cfg)
     _check_lock(cfg, have_segments=len(seg_old) > 0)
     if len(seg_old) and not new_round:
-        print(f"Using {len(seg_old)} existing segments from {SEGMENTS_CSV} "
+        print(f"Using {len(seg_old)} existing segments from {d / SEGMENTS_CSV} "
               f"(rounds 1-{int(seg_old['round'].max())}).")
         return seg_old
     if len(seg_old) and not force:
-        last = int(seg_old["round"].max())
-        labeled = set(_load_labels().id) if list(Path().glob(LABELS_GLOB)) else set()
-        todo = seg_old[(seg_old["round"] == last) & ~seg_old.id.isin(labeled)]
-        if len(todo):
-            raise RuntimeError(f"Round {last} still has {len(todo)} unlabeled segments. "
-                               "Finish them first, or pass force=True.")
-    if nights is None or not len(nights):
-        raise ValueError("No nights chosen. Run choose_nights or the night picker first.")
+        _check_labeled(cfg, seg_old)
 
     inv = _load_inventory(inv)
-    rnd = int(nights["round"].iloc[0])
-    seg_len, per_night = cfg["segment_seconds"], cfg["segments_per_night"]
+    rnd = int(seg_old["round"].max()) + 1 if len(seg_old) else 1
+    seg_len, cap = cfg["segment_seconds"], cfg["max_segments_per_site"]
     spacing = seg_len + cfg["min_gap_seconds"]
-    hours = cfg["focus"]["hours"]
-    focused = bool(hours or cfg["focus"]["months"])
     taken = {(s, r): g.offset_s.astype(int).tolist() for (s, r), g in seg_old.groupby(["site", "recording"])}
 
-    rows, short = [], []
-    for nt in nights.itertuples():
-        files = inv[(inv.site == nt.site) & (inv.night == nt.night)].reset_index(drop=True)
-        rng = np.random.default_rng([cfg["seed"], rnd, zlib.crc32(f"{nt.site}|{nt.night}".encode())])
-        site_taken = {r: taken.get((nt.site, r), []) for r in files.recording}
-        placed, how = _place(files, per_night, seg_len, spacing, site_taken, rng, hours)
-        if len(placed) < per_night:
-            short.append(f"{nt.site} {nt.night}: {len(placed)} of {per_night}")
-        for block, i, off in placed:
+    rows, notes = [], []
+    for site, files in inv.groupby("site"):
+        files = files.reset_index(drop=True)  # already in time (or file-name) order
+        n = min(cfg["segments_per_site"], cap - int((seg_old.site == site).sum()))
+        if n <= 0:
+            notes.append(f"{site}: reached max_segments_per_site ({cap})")
+            continue
+        rng = np.random.default_rng([cfg["seed"], rnd, zlib.crc32(site.encode())])
+        site_taken = {r: taken.get((site, r), []) for r in files.recording}
+        picked = _sample_site(files, n, seg_len, spacing, site_taken, rng, cfg["hours"], cfg["months"])
+        if len(picked) < n:
+            notes.append(f"{site}: {len(picked)} of {n} (no room left in its recordings)")
+        for i, off in picked:
             f = files.iloc[i]
             sid = SEP.join([cfg["source"], f.site, f.recording, f"s{off:06d}"])
             rows.append({
-                "id": sid, "path": (CLIP_DIR / f.site / f"{sid}.flac").as_posix(),
+                "id": sid, "path": f"{CLIP_DIR}/{f.site}/{sid}.flac",  # relative to exports/<source>/
                 "start_time": 0.0, "end_time": float(seg_len), "source": cfg["source"],
-                "site": f.site, "recording": f.recording, "night": nt.night,
-                "source_path": f.source_path, "offset_s": off,
+                "site": f.site, "recording": f.recording, "source_path": f.source_path, "offset_s": off,
                 "local_time": (f.start_local + pd.Timedelta(seconds=off)) if pd.notna(f.start_local) else pd.NaT,
-                "sample_rate": f.sample_rate, "round": rnd, "block": block + 1,
-                "placement": how, "night_choice": nt.night_choice, "focused": focused})
-    if short:
-        print("Fewer segments than asked (not enough room or focus hours):\n  " + "\n  ".join(short))
+                "sample_rate": f.sample_rate, "round": rnd})
+    if notes:
+        print("Fewer segments than asked:\n  " + "\n  ".join(notes))
     new = pd.DataFrame(rows, columns=[c for c in SEGMENT_COLUMNS if c != "seq"])
     if not len(new):
-        raise RuntimeError("No segments could be placed in these nights.")
+        raise RuntimeError("No segments could be sampled. Check SITES, HOURS and MONTHS.")
+    new = new.sort_values(["site", "local_time", "source_path", "offset_s"]).reset_index(drop=True)
     start_seq = int(seg_old.seq.max()) + 1 if len(seg_old) else 1
     new.insert(0, "seq", range(start_seq, start_seq + len(new)))
     all_seg = pd.concat([seg_old, new], ignore_index=True) if len(seg_old) else new
@@ -554,12 +429,17 @@ def sample_segments(cfg: dict, inv: pd.DataFrame, nights: pd.DataFrame | None,
 
     # Clips first: if cutting stops halfway, segments.csv is unchanged and a rerun picks the same segments.
     new_src = new.assign(audio_file=[(Path(cfg["audio_dir"]) / p).as_posix() for p in new.source_path],
-                         duration_s=float(seg_len))
-    cut_clips(new_src, src="audio_file", start="offset_s", duration="duration_s", dest="path")
-    all_seg.to_csv(SEGMENTS_CSV, index=False)
-    pd.concat([sel_old, nights], ignore_index=True).to_csv(SELECTION_CSV, index=False)
-    print(f"Round {rnd}: added {len(new)} segments ({new.site.nunique()} sites). "
-          f"{len(all_seg)} segments in {SEGMENTS_CSV}.")
+                         duration_s=float(seg_len), clip_file=[(d / p).as_posix() for p in new.path])
+    cut_clips(new_src, src="audio_file", start="offset_s", duration="duration_s", dest="clip_file")
+    all_seg.to_csv(d / SEGMENTS_CSV, index=False)
+
+    per_site = new.groupby("site").agg(segments=("id", "size"), recordings=("recording", "nunique"),
+                                       most_from_one_recording=("recording", lambda r: r.value_counts().max()))
+    print(f"Round {rnd}: added {len(new)} segments. {len(all_seg)} segments in {d / SEGMENTS_CSV}.")
+    print(per_site.to_string())
+    few = per_site.index[per_site.recordings < MIN_RECORDINGS].tolist()
+    if few:
+        print(f"Note: segments at {', '.join(few)} come from fewer than {MIN_RECORDINGS} recordings.")
     return all_seg
 
 
@@ -595,9 +475,8 @@ def cut_clips(table: pd.DataFrame, src: str, start: str, duration: str, dest: st
 
 # ─── Labels ──────────────────────────────────────────────────────────────────
 
-def _load_labels(files=None) -> pd.DataFrame:
-    """All annotator output files, keeping each annotator's latest answer per segment."""
-    files = sorted(Path().glob(LABELS_GLOB)) if files is None else files
+def _load_labels(files: list) -> pd.DataFrame:
+    """These annotator output files, keeping each annotator's latest answer per segment."""
     parts = []
     for p in files:
         try:
@@ -637,10 +516,10 @@ def _label_issues(seg: pd.DataFrame, lab: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(issues, columns=["id", "annotator", "issue"])
 
 
-def check_labels(cfg: dict | None = None) -> pd.DataFrame:
+def check_labels(cfg: dict) -> pd.DataFrame:
     """Show labeling progress per site and return a table of rows to fix."""
-    seg = pd.read_csv(SEGMENTS_CSV, dtype={"night": str})
-    lab = _load_labels()
+    seg = pd.read_csv(_dir(cfg) / SEGMENTS_CSV)
+    lab = _load_labels(_label_files(cfg))
     issues = _label_issues(seg, lab)
 
     first = lab.drop_duplicates("id")[["id", "frog_in_window"]]
@@ -651,7 +530,7 @@ def check_labels(cfg: dict | None = None) -> pd.DataFrame:
     print(f"{lab.annotator.nunique()} annotator(s), {first.id.isin(seg.id).sum()} of {len(seg)} segments labeled")
     print(prog.to_string())
     if "not labeled" not in prog and prog.get("yes", pd.Series(0)).sum() == 0 and len(lab):
-        print("\nNo frogs in any segment so far. You can add segments with 'Sample another round'.")
+        print("\nNo frogs in any segment so far. You can add segments with step 3 (Resample).")
     if len(issues):
         print(f"\n{len(issues)} answers to fix (find the id in the annotator's table):")
     else:
@@ -659,43 +538,63 @@ def check_labels(cfg: dict | None = None) -> pd.DataFrame:
     return issues
 
 
+# ─── Notebook steps (collaborator) ───────────────────────────────────────────
+
+def sample(cfg: dict) -> None:
+    """Step 1: list recordings, then sample the first round of segments (or reuse earlier ones)."""
+    sample_segments(cfg, build_inventory(cfg))
+
+
+def annotate(cfg: dict, annotator: str):
+    """Step 2: open the labeling tool. Labels save to exports/<source>/labels/frog_labels_<annotator>.csv."""
+    if not str(annotator or "").strip() or annotator == "XX":
+        raise ValueError("Set ANNOTATOR to your initials in step 1.")
+    d = _dir(cfg)
+    if not (d / SEGMENTS_CSV).exists():
+        raise RuntimeError("Nothing to label yet. Run step 1 first.")
+    from jupyter_bioacoustic import BioacousticAnnotator
+    # segments.csv lists clip paths relative to exports/<source>/, so audio_prefix points the tool there.
+    ann = BioacousticAnnotator(config=ANNOTATOR_YAML, project_name=f"Frog windows: {cfg['source']}",
+                               data_path=(d / SEGMENTS_CSV).as_posix(), data_index_column="id",
+                               audio_column="path", audio_prefix=d.as_posix(),
+                               output_path=(d / LABEL_DIR / f"frog_labels_{annotator}.csv").as_posix(),
+                               output_index_column="id", annotator=annotator)
+    ann.open()
+    return ann  # keep a reference, so the tool stays connected
+
+
+def add_round(cfg: dict, add: bool) -> None:
+    """Step 3: sample another round, once every segment so far is labeled. Does nothing unless add."""
+    if not add:
+        print("Set ADD_ROUND = True above to sample another round.")
+        return
+    if not len(_existing(cfg)):
+        raise RuntimeError("Nothing sampled yet. Run step 1 first.")
+    sample_segments(cfg, pd.read_csv(_dir(cfg) / INVENTORY_CSV), new_round=True)
+
+
 # ─── Export (collaborator) ───────────────────────────────────────────────────
 
-def export_source(cfg: dict, out_dir: str = "exports", force: bool = False) -> Path:
-    """Package clips, segments, labels and settings into exports/<source>_<date>.zip."""
+def export_source(cfg: dict, force: bool = False) -> Path:
+    """Step 4: check the labels, then zip exports/<source>/ into exports/<source>_<date>.zip."""
     issues = check_labels(cfg)
     if len(issues) and not force:
         raise RuntimeError("Fix the answers listed above first (or pass force=True).")
-    src = cfg["source"]
-    dest = Path(out_dir) / src
-    if dest.exists():
-        shutil.rmtree(dest)
-    (dest / "labels").mkdir(parents=True)
-
-    seg = pd.read_csv(SEGMENTS_CSV, dtype={"night": str})
-    shutil.copytree(CLIP_DIR, dest / "clips")
-    seg.assign(path=[Path(p).relative_to(WORK_DIR).as_posix() for p in seg.path]).to_csv(
-        dest / "segments.csv", index=False)
-    for p in Path().glob(LABELS_GLOB):
-        shutil.copy2(p, dest / "labels" / p.name)
-    shutil.copy2(SITES_CSV, dest / "sites.csv")
-    sites = pd.read_csv(SITES_CSV)
-    if sites[["lat", "lon"]].isna().any().any():
-        print(f"Note: some sites in {SITES_CSV} have no coordinates.")
+    d = _dir(cfg)
+    seg = pd.read_csv(d / SEGMENTS_CSV)
 
     try:
         from importlib.metadata import version
         jb = version("jupyter-bioacoustic")
     except Exception:
         jb = "unknown"
-    info = yaml.safe_load(LOCK_YAML.read_text())
-    info.update(exported=date.today().isoformat(), jupyter_bioacoustic=jb,
-                segments=len(seg), labeled=int(seg.id.isin(_load_labels().id).sum()))
-    (dest / "source.yaml").write_text(yaml.safe_dump(info, sort_keys=False))
+    info = yaml.safe_load((d / LOCK_YAML).read_text())
+    info.update(exported=date.today().isoformat(), jupyter_bioacoustic=jb, segments=len(seg),
+                labeled=int(seg.id.isin(_load_labels(_label_files(cfg)).id).sum()))
+    (d / LOCK_YAML).write_text(yaml.safe_dump(info, sort_keys=False))
 
-    zip_path = Path(shutil.make_archive(str(Path(out_dir) / f"{src}_{date.today():%Y%m%d}"),
-                                        "zip", root_dir=out_dir, base_dir=src))
-    shutil.rmtree(dest)
+    zip_path = Path(shutil.make_archive(str(EXPORTS_DIR / f"{d.name}_{date.today():%Y%m%d}"),
+                                        "zip", root_dir=EXPORTS_DIR, base_dir=d.name))
     print(f"Send this file: {zip_path.resolve()}")
     return zip_path
 
@@ -719,12 +618,12 @@ def ingest_source(path: str, dataset_root: str = "dataset") -> Path:
         else:
             src_dir = Path(path)
 
-        missing = [f for f in ("source.yaml", "segments.csv", "sites.csv", "clips") if not (src_dir / f).exists()]
+        missing = [f for f in ("source.yaml", "segments.csv", "clips") if not (src_dir / f).exists()]
         if missing:
             raise ValueError(f"Missing from {path}: {', '.join(missing)}")
         info = yaml.safe_load((src_dir / "source.yaml").read_text())
         name = info["source"]
-        seg = pd.read_csv(src_dir / "segments.csv", dtype={"night": str})
+        seg = pd.read_csv(src_dir / "segments.csv")
         problems = []
         if seg.id.duplicated().any():
             problems.append("duplicate segment IDs")
@@ -749,7 +648,7 @@ def ingest_source(path: str, dataset_root: str = "dataset") -> Path:
         if (dest / "labels").exists():
             shutil.rmtree(dest / "labels")
         shutil.copytree(src_dir / "labels", dest / "labels")
-        for f in ("segments.csv", "sites.csv", "source.yaml"):
+        for f in ("segments.csv", "source.yaml"):
             shutil.copy2(src_dir / f, dest / f)
     print(f"{name}: {len(seg)} segments, {lab.id.nunique()} labeled, "
           f"{lab.annotator.nunique()} annotator(s) -> {dest}")
@@ -783,7 +682,7 @@ def build_dataset(dataset_root: str = "dataset", species_csv: str = "species.csv
 
     segs, labs = [], []
     for d in sorted((root / "sources").iterdir()):
-        s = pd.read_csv(d / "segments.csv", dtype={"night": str})
+        s = pd.read_csv(d / "segments.csv")
         s["clip_path"] = [f"sources/{d.name}/{p}" for p in s.path]
         segs.append(s)
         labs.append(_load_labels(sorted((d / "labels").glob("*.csv"))))
@@ -838,8 +737,8 @@ def build_dataset(dataset_root: str = "dataset", species_csv: str = "species.csv
     seg.to_csv(out / "segments.csv", index=False)
     lab.assign(species=lab.species.apply(";".join)).to_csv(out / "labels.csv", index=False)
     usable = win[win.status.isin(["positive", "negative"])]
-    keep = ["window_id", "id", "clip_path", "start", "end", "source", "site", "site_key", "night",
-            "round", "focused", "status", "species"] + [f"sp_{c}" for c in all_codes]
+    keep = ["window_id", "id", "clip_path", "start", "end", "source", "site", "site_key",
+            "round", "status", "species"] + [f"sp_{c}" for c in all_codes]
     usable[keep].to_csv(out / "windows.csv", index=False)
     win[win.status.isin(["unsure", "disagreement"])][["id", "clip_path", "status", "source", "site"]].to_csv(
         out / "review.csv", index=False)

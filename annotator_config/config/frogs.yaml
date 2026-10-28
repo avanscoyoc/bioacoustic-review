@@ -13,7 +13,7 @@ description:
 display_columns:
 - id
 - site
-- night
+- recording
 - round
 capture: true
 capture_dir: output/spectrograms
