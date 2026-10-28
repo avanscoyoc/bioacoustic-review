@@ -13,7 +13,6 @@ We're building a training dataset for a frog call classifier. You'll label short
 5. **Need more segments?** Once every segment is labeled, use step 6 of the notebook to add a round. Never delete or edit earlier rows.
 6. **Send.** Run the notebook's export step and send us the zip file it creates in `exports/`.
 
-**Pilot first.** Label the first 25 segments, send them to us, and wait for feedback before doing the rest.
 
 ## Labeling a segment
 
@@ -36,7 +35,6 @@ Click **Submit** to save. Add notes for anything unusual. Your answers save as y
 - **Species 1** is the species of the call you centered the window on.
 - Add **Species 2** and **3** only if they also call inside the window.
 - Choose **Unknown frog** if you're sure it's a frog but not which species.
-- Choose a group entry (MYLF, PACH, WETO) when the call can't be told apart from related species.
 - **Calling index** for the window:
   - **1** = individual calls are countable and don't overlap
   - **2** = calls overlap, but you can still count callers
@@ -56,4 +54,4 @@ Click **Submit** to save. Add notes for anything unusual. Your answers save as y
 - Skip segments. Answer **Unsure** instead.
 - Edit `segments.csv` or the clips, rename audio files, or edit the output file by hand.
 - Change `source`, `path_pattern`, `recording_time` or the sampling settings after your first round. The notebook will stop you if you do.
-- Discuss segments with another labeler until you've both finished. Some segments are labeled by two people to check agreement.
+
