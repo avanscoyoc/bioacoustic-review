@@ -18,28 +18,12 @@ Listen to the whole 10 seconds and look at the spectrogram, then answer **Any fr
 
 | If… | Then… |
 |---|---|
-| A frog calls anywhere in the segment | Click to center the yellow 3-second window on the **clearest** frog call. Answer **Yes**. |
+| A frog calls anywhere in the segment | Click to center the yellow 3-second window on the **clearest** frog call. Answer **Yes**. Select additional species and clarity of each call.|
 | No frog calls anywhere in the segment | Don't place a window. Answer **No**. |
-| You can't tell whether a sound is a frog | Center the window on that sound. Answer **Unsure**. |
+| You can't tell whether a sound is a frog | Center the window on that sound. Answer **Unsure**. A wrong Yes or No harms the model more than an Unsure does. |
 | Clipping, a dead or silent microphone, or noise that hides everything | Answer **Recording unusable**. |
 
 Whatever your answer, tick every non-frog sound you hear anywhere in the 10 seconds. Click **Submit** to save. Add notes for anything unusual. Your answers save as you go, so you can stop and come back later.
-
-## Rules for each answer
-
-1. **Yes:** means you hear a frog! Click on the spectrogram to center the window on a call. 
-A call counts as 'in the window' if at least half of a call is inside the yellow window.
-- **Species 1** select the species of the frog you centered the window on.
-- Add **Species 2** and **3** only if they also call inside the window.
-- **Call clarity:**
-  - **clear** = it stands out from the background
-  - **faint** = you can only just hear or see it
-
-2. **No** means no frog anywhere in the 10 seconds.
-
-3. **Unsure** Use Unsure whenever you're in doubt. A wrong Yes or No harms the model more than an Unsure does.
-
-4. **Other sounds** (every answer): tick every non-frog sound you hear anywhere in the 10 seconds: insects, birds or mammals, rain, wind, flowing water, voices/traffic/machinery, or handling and microphone noise. Leave them all blank if it's quiet.
 
 ## Ready to annotate a new dataset? 
 - Change `SOURCE`, and update the metadata in step 1. This will create a new export subfolder for your new annotation dataset and parameters. Continue with the protocol above
