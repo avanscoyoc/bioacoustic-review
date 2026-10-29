@@ -282,7 +282,7 @@ def build_inventory(cfg: dict) -> pd.DataFrame:
               f"Example: {inv.loc[~inv.pattern_ok, 'source_path'].iloc[0]}")
     too_short = (inv.duration_s < cfg["segment_seconds"]).sum()
     if too_short:
-        print(f"{too_short} files are shorter than {cfg['segment_seconds']} s, so no segments can come from them.")
+        print(f"{too_short} files are shorter than {cfg['segment_seconds']} s, so no clips can come from them.")
     if inv.start_local.isna().any():
         note = " HOURS and MONTHS can't apply to them." if cfg["hours"] or cfg["months"] else ""
         print(f"{inv.start_local.isna().sum()} files have no time in their name, so each counts as its own "
@@ -386,15 +386,15 @@ def _sample_night(pieces: list, n: int, spacing: float, done: list, rng: np.rand
 def _check_segments(seg: pd.DataFrame, spacing: float) -> None:
     dups = seg.id[seg.id.duplicated()]
     if len(dups):
-        raise ValueError(f"Duplicate segment IDs, e.g. {dups.iloc[0]}")
+        raise ValueError(f"Duplicate clip IDs, e.g. {dups.iloc[0]}")
     for (site, rec), g in seg.groupby(["site", "recording"]):
         d = np.diff(np.sort(g.offset_s.to_numpy(float)))
         if (d < spacing).any():
-            raise ValueError(f"Segments closer than {spacing:g} s in {site}/{rec}")
+            raise ValueError(f"Clips closer than {spacing:g} s in {site}/{rec}")
     for site, g in seg.groupby("site"):
         d = pd.to_datetime(g.local_time).dropna().sort_values().diff().dt.total_seconds()
         if (d < spacing).any():
-            raise ValueError(f"Segments closer than {spacing:g} s apart in time at {site}")
+            raise ValueError(f"Clips closer than {spacing:g} s apart in time at {site}")
 
 
 def _check_labeled(cfg: dict, seg: pd.DataFrame) -> None:
@@ -402,7 +402,7 @@ def _check_labeled(cfg: dict, seg: pd.DataFrame) -> None:
     last = int(seg["round"].max())
     todo = seg[(seg["round"] == last) & ~seg.id.isin(_load_labels(_label_files(cfg)).id)]
     if len(todo):
-        raise RuntimeError(f"Round {last} still has {len(todo)} unlabeled segments. Label them in step 2 first.")
+        raise RuntimeError(f"Round {last} still has {len(todo)} unlabeled clips. Label them in step 2 first.")
 
 
 def sample_segments(cfg: dict, inv: pd.DataFrame, new_round: bool = False, force: bool = False) -> pd.DataFrame:
@@ -416,7 +416,7 @@ def sample_segments(cfg: dict, inv: pd.DataFrame, new_round: bool = False, force
     seg_old = _existing(cfg)
     _check_lock(cfg, have_segments=len(seg_old) > 0)
     if len(seg_old) and not new_round:
-        print(f"Using {len(seg_old)} existing segments from {d / SEGMENTS_CSV} "
+        print(f"Using {len(seg_old)} existing clips from {d / SEGMENTS_CSV} "
               f"(rounds 1-{int(seg_old['round'].max())}).")
         return seg_old
     if len(seg_old) and not force:
@@ -459,14 +459,14 @@ def sample_segments(cfg: dict, inv: pd.DataFrame, new_round: bool = False, force
                     "local_time": t, "night": night, "stratum": s, "sample_rate": f.sample_rate, "round": rnd})
                 got += 1
         summary.append({"site": site, "eligible_nights": len(nights), "nights": len(picked),
-                        "segments": got, "asked": k * per_night})
+                        "clips": got, "asked": k * per_night})
     if capped:
         print(f"Reached max_segments_per_site ({cap}): {', '.join(capped)}")
     new = pd.DataFrame(rows, columns=[c for c in SEGMENT_COLUMNS if c != "seq"])
     if not len(new) and not summary:
         return seg_old  # every site is full
     if not len(new):
-        raise RuntimeError("No segments could be sampled. Check SITES, HOURS and MONTHS.")
+        raise RuntimeError("No clips could be sampled. Check SITES, HOURS and MONTHS.")
     new = new.sort_values(["site", "local_time", "source_path", "offset_s"]).reset_index(drop=True)
     start_seq = int(seg_old.seq.max()) + 1 if len(seg_old) else 1
     new.insert(0, "seq", range(start_seq, start_seq + len(new)))
@@ -480,10 +480,10 @@ def sample_segments(cfg: dict, inv: pd.DataFrame, new_round: bool = False, force
     all_seg.to_csv(d / SEGMENTS_CSV, index=False)
 
     per_site = pd.DataFrame(summary).set_index("site")
-    print(f"Round {rnd}: added {len(new)} segments. {len(all_seg)} segments in {d / SEGMENTS_CSV}.")
+    print(f"Round {rnd}: added {len(new)} clips. {len(all_seg)} clips in {d / SEGMENTS_CSV}.")
     print(per_site.drop(columns="asked").to_string())
-    if (per_site.segments < per_site.asked).any():
-        print(f"Fewer segments than asked where a site has fewer than {cfg['nights_per_site']} nights with "
+    if (per_site.clips < per_site.asked).any():
+        print(f"Fewer clips than asked where a site has fewer than {cfg['nights_per_site']} nights with "
               f"audio in HOURS and MONTHS, or a night has too little audio.")
     return all_seg
 
@@ -547,7 +547,7 @@ def _label_issues(seg: pd.DataFrame, lab: pd.DataFrame) -> pd.DataFrame:
     issues = []
     for r in lab.itertuples():
         if r.id not in seg_len.index:
-            issues.append((r.id, r.annotator, "label for a segment not in segments.csv"))
+            issues.append((r.id, r.annotator, "label for a clip not in segments.csv"))
             continue
         if r.frog_in_window in ("yes", "unsure"):
             if pd.isna(r.window_start) or pd.isna(r.window_end):
@@ -571,11 +571,11 @@ def check_labels(cfg: dict) -> pd.DataFrame:
     m = seg[["id", "site"]].merge(first, on="id", how="left")
     prog = (m.assign(answer=m.frog_in_window.fillna("not labeled"))
              .pivot_table(index="site", columns="answer", values="id", aggfunc="size", fill_value=0))
-    prog.insert(0, "segments", prog.sum(axis=1))
-    print(f"{lab.annotator.nunique()} annotator(s), {first.id.isin(seg.id).sum()} of {len(seg)} segments labeled")
+    prog.insert(0, "clips", prog.sum(axis=1))
+    print(f"{lab.annotator.nunique()} annotator(s), {first.id.isin(seg.id).sum()} of {len(seg)} clips labeled")
     print(prog.to_string())
     if "not labeled" not in prog and prog.get("yes", pd.Series(0)).sum() == 0 and len(lab):
-        print("\nNo frogs in any segment so far. You can add segments with step 3 (Resample).")
+        print("\nNo frogs in any clip so far. You can add clips with step 3 (Resample).")
     if len(issues):
         print(f"\n{len(issues)} answers to fix (find the id in the annotator's table):")
     else:
@@ -671,15 +671,15 @@ def ingest_source(path: str, dataset_root: str = "dataset") -> Path:
         seg = pd.read_csv(src_dir / "segments.csv")
         problems = []
         if seg.id.duplicated().any():
-            problems.append("duplicate segment IDs")
+            problems.append("duplicate clip IDs")
         if not seg.id.str.startswith(name + SEP).all():
             problems.append(f"IDs that don't start with '{name}{SEP}'")
         no_clip = [p for p in seg.path if not (src_dir / p).exists()]
         if no_clip:
-            problems.append(f"{len(no_clip)} segments without a clip, e.g. {no_clip[0]}")
+            problems.append(f"{len(no_clip)} clips without an audio file, e.g. {no_clip[0]}")
         lab = _load_labels(sorted((src_dir / "labels").glob("*.csv")))
         if (~lab.id.isin(seg.id)).any():
-            problems.append("labels for segments not in segments.csv")
+            problems.append("labels for clips not in segments.csv")
         if problems:
             raise ValueError(f"{name}: " + "; ".join(problems))
 
@@ -695,7 +695,7 @@ def ingest_source(path: str, dataset_root: str = "dataset") -> Path:
         shutil.copytree(src_dir / "labels", dest / "labels")
         for f in ("segments.csv", "source.yaml"):
             shutil.copy2(src_dir / f, dest / f)
-    print(f"{name}: {len(seg)} segments, {lab.id.nunique()} labeled, "
+    print(f"{name}: {len(seg)} clips, {lab.id.nunique()} labeled, "
           f"{lab.annotator.nunique()} annotator(s) -> {dest}")
     return dest
 
@@ -749,7 +749,7 @@ def build_dataset(dataset_root: str = "dataset", species_csv: str = "species.csv
     if len(pairs):
         a = pairs.groupby("id").nth(0).set_index("id").status
         b = pairs.groupby("id").nth(1).set_index("id").status.reindex(a.index)
-        agreement = (f"Double-labeled: {len(a)} segments. Same answer: {(a == b).mean():.0%} "
+        agreement = (f"Double-labeled: {len(a)} clips. Same answer: {(a == b).mean():.0%} "
                      f"(kappa {_kappa(a, b):.2f})")
 
     def consensus(g):

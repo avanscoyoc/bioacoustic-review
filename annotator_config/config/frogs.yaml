@@ -1,11 +1,11 @@
 description:
   title: Instructions
-  text: "Full rules are in PROTOCOL.md. For each 10-second segment:\n\n1. Listen\
-    \ to the whole segment and look at the spectrogram.\n2. **Frog calling?** Click\
+  text: "Full rules are in PROTOCOL.md. For each 10-second clip:\n\n1. Listen\
+    \ to the whole clip and look at the spectrogram.\n2. **Frog calling?** Click\
     \ to center the yellow 3-second window on the clearest frog call, then answer\
-    \ **Yes**.\n3. **No frog anywhere in the segment?** Don't place a window. Answer\
+    \ **Yes**.\n3. **No frog anywhere in the clip?** Don't place a window. Answer\
     \ **No**.\n4. **Can't tell?** Place the window on the sound in question and answer\
-    \ **Unsure**.\n5. **Clipping, dead mic or nothing usable?** Answer **Recording\
+    \ **Unsure**.\n5. **Distorted audio, dead mic or nothing usable?** Answer **Recording\
     \ unusable**.\n6. Whatever your answer, tick every non-frog sound you hear anywhere\
     \ in the 10 seconds.\n\nA call counts as in the window if at least half of it\
     \ is inside. Use **Unknown frog** when you're sure it's a frog but not which\

@@ -9,7 +9,7 @@ There are three workflows. Each has its own notebook, data folder and annotator 
 | | 1. API detections | 2. Local recordings | 3. Frog sampling |
 |---|---|---|---|
 | Notebook | `notebooks/01_review_API_detections.ipynb` | `notebooks/02_review_local_recordings.ipynb` | `notebooks/03_frog_sampling.ipynb` |
-| What you review | A random sample of detections at sites you pick on a map | Your own audio files, whole or split into clips | Random 10-second segments from your own recordings, labeled for frog calls (rules in `PROTOCOL.md`) |
+| What you review | A random sample of detections at sites you pick on a map | Your own audio files, whole or split into clips | Random 10-second clips from your own recordings, labeled for frog calls (rules in `PROTOCOL.md`) |
 | Audio comes from | S3, using your AWS keys (the API only gives the file paths) | `local_data/audio/` | `local_data/audio/`, or any folder you set in the notebook |
 | Needs | `.env` with an API token and AWS keys | Nothing | Nothing |
 | Clip list | `detection_data/filtered_detections.csv` | `local_data/metadata.csv` | `exports/<source>/segments.csv` |
@@ -30,7 +30,7 @@ pixi.toml             environment: Python, JupyterLab, ffmpeg, jupyter-bioacoust
 .devcontainer/        optional Docker setup for VS Code
 ```
 
-Git ignores `.env` and the `local_data/`, `detection_data/`, `output/` and `exports/` folders. You create `.env` and `local_data/audio/` yourself (step 3 below). The notebooks and the annotator create the rest. Spectrogram images from the annotator's **Capture** button are saved in `output/spectrograms/`. Notebook 03 never writes to your audio folder: everything it makes for a dataset (clips, segments, labels, settings) goes in `exports/<source>/`, and its export step zips that folder.
+Git ignores `.env` and the `local_data/`, `detection_data/`, `output/` and `exports/` folders. You create `.env` and `local_data/audio/` yourself (step 3 below). The notebooks and the annotator create the rest. Spectrogram images from the annotator's **Capture** button are saved in `output/spectrograms/`. Notebook 03 never writes to your audio folder: everything it makes for a dataset (clips, clip list, labels, settings) goes in `exports/<source>/`, and its export step zips that folder.
 
 **Species:** `species.csv` sets the species options in both forms. The forms read its `common_name` column, so edit or replace the file to review other species. It currently lists 33 California frog and toad species, plus 3 groups for species whose calls can't be told apart (`MYLF`, `PACH`, `WETO`). Each row also has a 4-letter code, the scientific name, native or non-native status, and aliases.
 

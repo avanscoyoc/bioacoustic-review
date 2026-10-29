@@ -111,7 +111,7 @@ dynamic_forms:
       required: true
       items:
       - too faint
-      - call cut off at the segment edge
+      - call cut off at the clip edge
       - might not be a frog
       - masked by noise
       - other (explain in notes)
