@@ -600,7 +600,7 @@ def annotate(cfg: dict, annotator: str):
     from jupyter_bioacoustic import BioacousticAnnotator
     # segments.csv lists clip paths relative to exports/<source>/, so audio_prefix points the tool there.
     ann = BioacousticAnnotator(config=ANNOTATOR_YAML, project_name=f"Frog windows: {cfg['source']}",
-                               data_path=(d / SEGMENTS_CSV).as_posix(), data_index_column="id",
+                               data=(d / SEGMENTS_CSV).as_posix(), data_index_column="id",
                                audio_column="path", audio_prefix=d.as_posix(),
                                output_path=(d / LABEL_DIR / f"frog_labels_{annotator}.csv").as_posix(),
                                output_index_column="id", annotator=annotator)
