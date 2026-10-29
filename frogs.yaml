@@ -1,11 +1,13 @@
 # Sampling design for notebooks/03_frog_sampling.ipynb, set by the project lead.
 # Collaborators: don't edit this file. Your settings go in step 1 of the notebook.
 # Every collaborator uses the same values, so all datasets can be merged.
-# segment_seconds, min_gap_seconds and seed are locked after the first round:
-# the notebook stops if they change.
+# segments_per_night, segment_seconds, min_gap_seconds, night_starts_at and seed are
+# locked after the first round: the notebook stops if they change.
 
-segments_per_site: 25       # clips per site in each round, spread over as many recordings as possible
+nights_per_site: 5          # nights per site in each round, one from each of this many equal groups of nights
+segments_per_night: 5       # clips per night, one from each of this many equal parts of the night's audio
 segment_seconds: 10
-min_gap_seconds: 60         # at least this much audio between two clips from the same recording
+min_gap_seconds: 60         # at least this much audio between two clips
+night_starts_at: 12         # a night runs from this hour (local time) to the same hour the next day
 max_segments_per_site: 75   # stop adding rounds at a site after this many clips
 seed: 0

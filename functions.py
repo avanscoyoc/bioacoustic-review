@@ -4,11 +4,12 @@ Collaborator (notebooks/03_frog_sampling.ipynb):
     load_config -> sample (inventory, segments, clips) -> annotate
     -> add_round (only if needed) -> export_source
 
-Sampling, per site and round: segments_per_site random clips, spread over as many
-recordings as possible. Every recording gets one clip before any gets a second;
-recordings are picked spread across time (or file names, when there's no time).
-Each clip is a random start inside HOURS and MONTHS (when the recording has a time),
-at least min_gap_seconds from other clips in the same recording.
+Sampling, per site and round: the site's nights with audio inside HOURS and MONTHS are
+split into nights_per_site equal groups in date order, and one night is drawn from each.
+Each night's eligible audio, pooled across its files, is split into segments_per_night
+equal strata with one random clip in each, at least min_gap_seconds from any other clip.
+Later rounds use unsampled nights first. A night runs from night_starts_at to the same
+hour the next day; a file with no time in its name is its own night.
 
 Project lead:
     ingest_source (one call per received zip) -> build_dataset (one merged, labeled table)
@@ -47,17 +48,17 @@ AUDIO_EXTENSIONS = {".wav", ".flac", ".mp3", ".ogg"}
 SEP = "__"  # joins the parts of an ID: source__site__recording__s000000
 WINDOW_SECONDS = 3.0
 HIGH_RES_SUBTYPES = {"PCM_24", "PCM_32", "FLOAT", "DOUBLE"}
-MIN_RECORDINGS = 5  # warn when a site's clips come from fewer recordings than this
 
-DESIGN_KEYS = ["segments_per_site", "segment_seconds", "min_gap_seconds", "max_segments_per_site", "seed"]
+DESIGN_KEYS = ["nights_per_site", "segments_per_night", "segment_seconds", "min_gap_seconds",
+               "night_starts_at", "max_segments_per_site", "seed"]
 # Settings that decide which segments exist. They can't change once sampling has started.
 LOCKED_KEYS = ["source", "path_pattern", "recording_time", "sites", "hours", "months",
-               "segment_seconds", "min_gap_seconds", "seed"]
+               "segments_per_night", "segment_seconds", "min_gap_seconds", "night_starts_at", "seed"]
 
 SEGMENT_COLUMNS = ["seq", "id", "path", "start_time", "end_time", "source", "site", "recording",
-                   "source_path", "offset_s", "local_time", "sample_rate", "round"]
-LABEL_COLUMNS = ["frog_in_window", "window_start", "window_end", "species_1", "species_2",
-                 "species_3", "calling_index", "clarity", "call_type", "species_outside",
+                   "source_path", "offset_s", "local_time", "night", "stratum", "sample_rate", "round"]
+LABEL_COLUMNS = ["frog_in_window", "window_start", "window_end", "species_1", "clarity",
+                 "species_2", "clarity_2", "species_3", "clarity_3",
                  "insects", "birds_mammals", "rain", "wind", "water", "human", "handling",
                  "unsure_reason", "notes"]
 
@@ -102,11 +103,13 @@ def load_config(source: str, contributor: str, audio_dir: str, path_pattern: str
     if missing:
         design_errors.append("missing: " + ", ".join(missing))
     else:
-        for key in ("segments_per_site", "segment_seconds", "max_segments_per_site"):
+        for key in ("nights_per_site", "segments_per_night", "segment_seconds", "max_segments_per_site"):
             if not isinstance(design[key], int) or design[key] < 1:
                 design_errors.append(f"{key}: must be a whole number of 1 or more")
         if not isinstance(design["min_gap_seconds"], (int, float)) or design["min_gap_seconds"] < 0:
             design_errors.append("min_gap_seconds: must be 0 or more")
+        if not isinstance(design["night_starts_at"], int) or not 0 <= design["night_starts_at"] <= 23:
+            design_errors.append("night_starts_at: must be a whole hour from 0 to 23")
         if design["segment_seconds"] < WINDOW_SECONDS:
             design_errors.append(f"segment_seconds: must be at least {WINDOW_SECONDS:g}")
 
@@ -282,8 +285,8 @@ def build_inventory(cfg: dict) -> pd.DataFrame:
         print(f"{too_short} files are shorter than {cfg['segment_seconds']} s, so no segments can come from them.")
     if inv.start_local.isna().any():
         note = " HOURS and MONTHS can't apply to them." if cfg["hours"] or cfg["months"] else ""
-        print(f"{inv.start_local.isna().sum()} files have no time in their name, so they're ordered by "
-              f"file name instead of time.{note}")
+        print(f"{inv.start_local.isna().sum()} files have no time in their name, so each counts as its own "
+              f"night.{note}")
     print(summary.to_string())
     return inv
 
@@ -298,59 +301,85 @@ def _load_inventory(inv: pd.DataFrame) -> pd.DataFrame:
 
 def _existing(cfg: dict) -> pd.DataFrame:
     seg_csv = _dir(cfg) / SEGMENTS_CSV
-    return (pd.read_csv(seg_csv) if seg_csv.exists() else pd.DataFrame(columns=SEGMENT_COLUMNS))
+    return (pd.read_csv(seg_csv, dtype={"night": str}) if seg_csv.exists()
+            else pd.DataFrame(columns=SEGMENT_COLUMNS))
 
 
 def _pick_spread(items: list, k: int, rng: np.random.Generator) -> list:
     """k items from an ordered list: split it into k equal groups and pick one at random from each."""
+    if k <= 0:
+        return []
     if len(items) <= k:
         return list(items)
     return [items[rng.choice(g)] for g in np.array_split(np.arange(len(items)), k)]
 
 
-def _starts(f, seg_len: float, spacing: float, taken: list, hours, months) -> np.ndarray:
-    """Every whole-second start where a clip fits in recording f.
+def _secs(t) -> np.ndarray:
+    """Local clock times as seconds (NaN for no time), whatever the datetime resolution."""
+    return np.asarray((t - pd.Timestamp(0)) / pd.Timedelta(seconds=1), float)
 
-    Leaves out starts within `spacing` of its earlier clips (`taken`) and, if the
-    recording has a time, starts outside `hours` and `months`.
+
+def _far(x: np.ndarray, taken, spacing: float) -> np.ndarray:
+    """True where x is at least `spacing` from every value in `taken`."""
+    taken = np.sort(np.asarray(taken, float))
+    if not len(taken):
+        return np.ones(len(x), bool)
+    i = np.searchsorted(taken, x)
+    return ((np.abs(x - taken[np.maximum(i - 1, 0)]) >= spacing)
+            & (np.abs(taken[np.minimum(i, len(taken) - 1)] - x) >= spacing))
+
+
+def _nights(files: pd.DataFrame, seg_len: float, spacing: float, taken: dict, cfg: dict) -> dict:
+    """Every eligible whole-second clip start at one site, by night: {night: [(file index, offsets, times)]}.
+
+    A start is eligible if the clip fits in the file, its local time is inside HOURS and
+    MONTHS, and it is at least `spacing` from earlier clips (`taken`). Times are seconds
+    on the local clock, so clips in neighbouring files keep their distance too. A file
+    with no time is its own night, with times None. Nights come in date order.
     """
-    o = np.arange(0, int(np.floor(f.duration_s - seg_len)) + 1)  # empty if the file is too short
-    for e in taken:
-        o = o[np.abs(o - e) >= spacing]
-    if (hours or months) and pd.notna(f.start_local):
+    out = {}
+    for i, f in enumerate(files.itertuples()):
+        o = np.arange(0, int(np.floor(f.duration_s - seg_len)) + 1)  # empty if the file is too short
+        if pd.isna(f.start_local):
+            o = o[_far(o, taken["offsets"].get(f.recording, []), spacing)]
+            if len(o):
+                out[f"file-{f.recording}"] = [(i, o, None)]
+            continue
         t = f.start_local + pd.to_timedelta(o, unit="s")
-        keep = np.ones(len(o), bool)
-        if hours:
-            keep &= np.isin(t.hour, hours)
-        if months:
-            keep &= np.isin(t.month, months)
-        o = o[keep]
-    return o
+        keep = _far(_secs(t), taken["times"], spacing)
+        if cfg["hours"]:
+            keep &= np.isin(t.hour, cfg["hours"])
+        if cfg["months"]:
+            keep &= np.isin(t.month, cfg["months"])
+        o, t = o[keep], t[keep]
+        # A file can run past night_starts_at, so split it where the night changes
+        night = (t - pd.Timedelta(hours=cfg["night_starts_at"])).normalize()
+        for part in np.split(np.arange(len(o)), np.flatnonzero(np.diff(night.asi8)) + 1):
+            if len(part):
+                out.setdefault(f"{night[part[0]]:%Y-%m-%d}", []).append((i, o[part], _secs(t[part])))
+    return dict(sorted(out.items()))
 
 
-def _sample_site(files: pd.DataFrame, n: int, seg_len: float, spacing: float, taken: dict,
-                 rng: np.random.Generator, hours, months) -> list:
-    """Choose up to n clips at one site, as (file index, offset), over as many recordings as possible.
+def _sample_night(pieces: list, n: int, spacing: float, done: list, rng: np.random.Generator) -> list:
+    """Up to n clips in one night, as (stratum, file index, offset).
 
-    `files` is in time order (or file-name order). Each pass gives one more clip to the
-    recordings with the fewest clips so far, counting earlier rounds. When more of them
-    are open than clips are still needed, one is picked at random from each of that many
-    equal groups, so the picks spread across the deployment.
+    The night's eligible starts, pooled across its files in time order, are split into
+    n equal strata, and one start is drawn at random from each. Each draw rules out the
+    starts within `spacing` of it, as do this round's clips in other nights (`done`,
+    clock times), so a stratum with nothing left gives no clip.
     """
-    starts = [_starts(f, seg_len, spacing, taken.get(f.recording, []), hours, months)
-              for f in files.itertuples()]
-    count = [len(taken.get(r, [])) for r in files.recording]
+    fi = np.concatenate([np.full(len(o), i) for i, o, _ in pieces])
+    off = np.concatenate([o for _, o, _ in pieces])
+    t = np.concatenate([np.full(len(o), np.nan) if ts is None else ts for _, o, ts in pieces])
+    free = np.isnan(t) | _far(t, done, spacing)
     chosen = []
-    while len(chosen) < n:
-        open_ = [i for i in range(len(files)) if len(starts[i])]
-        if not open_:
-            break  # no recording has room for another clip
-        fewest = min(count[i] for i in open_)
-        for i in _pick_spread([i for i in open_ if count[i] == fewest], n - len(chosen), rng):
-            off = int(rng.choice(starts[i]))
-            chosen.append((i, off))
-            count[i] += 1
-            starts[i] = starts[i][np.abs(starts[i] - off) >= spacing]
+    for s, idx in enumerate(np.array_split(np.arange(len(off)), n), start=1):
+        idx = idx[free[idx]]
+        if not len(idx):
+            continue
+        c = rng.choice(idx)
+        chosen.append((s, int(fi[c]), int(off[c])))
+        free &= ~(((fi == fi[c]) & (np.abs(off - off[c]) < spacing)) | (np.abs(t - t[c]) < spacing))
     return chosen
 
 
@@ -362,6 +391,10 @@ def _check_segments(seg: pd.DataFrame, spacing: float) -> None:
         d = np.diff(np.sort(g.offset_s.to_numpy(float)))
         if (d < spacing).any():
             raise ValueError(f"Segments closer than {spacing:g} s in {site}/{rec}")
+    for site, g in seg.groupby("site"):
+        d = pd.to_datetime(g.local_time).dropna().sort_values().diff().dt.total_seconds()
+        if (d < spacing).any():
+            raise ValueError(f"Segments closer than {spacing:g} s apart in time at {site}")
 
 
 def _check_labeled(cfg: dict, seg: pd.DataFrame) -> None:
@@ -388,37 +421,50 @@ def sample_segments(cfg: dict, inv: pd.DataFrame, new_round: bool = False, force
         return seg_old
     if len(seg_old) and not force:
         _check_labeled(cfg, seg_old)
+    if len(seg_old) and "night" not in seg_old:
+        raise RuntimeError(f"{d / SEGMENTS_CSV} was sampled with an older design. Use a new SOURCE to start over.")
 
     inv = _load_inventory(inv)
     rnd = int(seg_old["round"].max()) + 1 if len(seg_old) else 1
-    seg_len, cap = cfg["segment_seconds"], cfg["max_segments_per_site"]
+    seg_len, per_night, cap = cfg["segment_seconds"], cfg["segments_per_night"], cfg["max_segments_per_site"]
     spacing = seg_len + cfg["min_gap_seconds"]
-    taken = {(s, r): g.offset_s.astype(int).tolist() for (s, r), g in seg_old.groupby(["site", "recording"])}
 
-    rows, notes = [], []
+    rows, summary, capped = [], [], []
     for site, files in inv.groupby("site"):
         files = files.reset_index(drop=True)  # already in time (or file-name) order
-        n = min(cfg["segments_per_site"], cap - int((seg_old.site == site).sum()))
-        if n <= 0:
-            notes.append(f"{site}: reached max_segments_per_site ({cap})")
+        old = seg_old[seg_old.site == site]
+        k = min(cfg["nights_per_site"], (cap - len(old)) // per_night)
+        if k <= 0:
+            capped.append(site)
             continue
+        taken = {"offsets": {r: g.offset_s.astype(int).tolist() for r, g in old.groupby("recording")},
+                 "times": _secs(pd.to_datetime(old.local_time).dropna())}
+        nights = _nights(files, seg_len, spacing, taken, cfg)
         rng = np.random.default_rng([cfg["seed"], rnd, zlib.crc32(site.encode())])
-        site_taken = {r: taken.get((site, r), []) for r in files.recording}
-        picked = _sample_site(files, n, seg_len, spacing, site_taken, rng, cfg["hours"], cfg["months"])
-        if len(picked) < n:
-            notes.append(f"{site}: {len(picked)} of {n} (no room left in its recordings)")
-        for i, off in picked:
-            f = files.iloc[i]
-            sid = SEP.join([cfg["source"], f.site, f.recording, f"s{off:06d}"])
-            rows.append({
-                "id": sid, "path": f"{CLIP_DIR}/{f.site}/{sid}.flac",  # relative to exports/<source>/
-                "start_time": 0.0, "end_time": float(seg_len), "source": cfg["source"],
-                "site": f.site, "recording": f.recording, "source_path": f.source_path, "offset_s": off,
-                "local_time": (f.start_local + pd.Timedelta(seconds=off)) if pd.notna(f.start_local) else pd.NaT,
-                "sample_rate": f.sample_rate, "round": rnd})
-    if notes:
-        print("Fewer segments than asked:\n  " + "\n  ".join(notes))
+        # Unsampled nights first; nights from earlier rounds only if there aren't enough
+        picked = _pick_spread([n for n in nights if n not in set(old.night)], k, rng)
+        picked += _pick_spread([n for n in nights if n in set(old.night)], k - len(picked), rng)
+        done, got = [], 0  # clock times of this round's clips at the site
+        for night in picked:
+            for s, i, off in _sample_night(nights[night], per_night, spacing, done, rng):
+                f = files.iloc[i]
+                sid = SEP.join([cfg["source"], f.site, f.recording, f"s{off:06d}"])
+                t = (f.start_local + pd.Timedelta(seconds=off)) if pd.notna(f.start_local) else pd.NaT
+                if pd.notna(t):
+                    done.append(_secs(t))
+                rows.append({
+                    "id": sid, "path": f"{CLIP_DIR}/{f.site}/{sid}.flac",  # relative to exports/<source>/
+                    "start_time": 0.0, "end_time": float(seg_len), "source": cfg["source"],
+                    "site": f.site, "recording": f.recording, "source_path": f.source_path, "offset_s": off,
+                    "local_time": t, "night": night, "stratum": s, "sample_rate": f.sample_rate, "round": rnd})
+                got += 1
+        summary.append({"site": site, "eligible_nights": len(nights), "nights": len(picked),
+                        "segments": got, "asked": k * per_night})
+    if capped:
+        print(f"Reached max_segments_per_site ({cap}): {', '.join(capped)}")
     new = pd.DataFrame(rows, columns=[c for c in SEGMENT_COLUMNS if c != "seq"])
+    if not len(new) and not summary:
+        return seg_old  # every site is full
     if not len(new):
         raise RuntimeError("No segments could be sampled. Check SITES, HOURS and MONTHS.")
     new = new.sort_values(["site", "local_time", "source_path", "offset_s"]).reset_index(drop=True)
@@ -433,13 +479,12 @@ def sample_segments(cfg: dict, inv: pd.DataFrame, new_round: bool = False, force
     cut_clips(new_src, src="audio_file", start="offset_s", duration="duration_s", dest="clip_file")
     all_seg.to_csv(d / SEGMENTS_CSV, index=False)
 
-    per_site = new.groupby("site").agg(segments=("id", "size"), recordings=("recording", "nunique"),
-                                       most_from_one_recording=("recording", lambda r: r.value_counts().max()))
+    per_site = pd.DataFrame(summary).set_index("site")
     print(f"Round {rnd}: added {len(new)} segments. {len(all_seg)} segments in {d / SEGMENTS_CSV}.")
-    print(per_site.to_string())
-    few = per_site.index[per_site.recordings < MIN_RECORDINGS].tolist()
-    if few:
-        print(f"Note: segments at {', '.join(few)} come from fewer than {MIN_RECORDINGS} recordings.")
+    print(per_site.drop(columns="asked").to_string())
+    if (per_site.segments < per_site.asked).any():
+        print(f"Fewer segments than asked where a site has fewer than {cfg['nights_per_site']} nights with "
+              f"audio in HOURS and MONTHS, or a night has too little audio.")
     return all_seg
 
 

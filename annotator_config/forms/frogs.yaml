@@ -23,12 +23,33 @@ form:
       form: yes_form
     - label: 'No'
       value: 'no'
-      form: no_form
     - label: Unsure
       value: unsure
       form: unsure_form
     - label: Recording unusable
       value: unusable
+- text: Tick every non-frog sound you hear anywhere in the 10 seconds. Leave all blank if it is quiet.
+- checkbox:
+    label: 1) Insects
+    column: insects
+- checkbox:
+    label: 2) Birds or mammals
+    column: birds_mammals
+- checkbox:
+    label: 3) Rain
+    column: rain
+- checkbox:
+    label: 4) Wind
+    column: wind
+- checkbox:
+    label: 5) Flowing water
+    column: water
+- checkbox:
+    label: 6) Voices, traffic or machinery
+    column: human
+- checkbox:
+    label: 7) Handling or microphone noise
+    column: handling
 - textbox:
     label: Notes
     column: notes
@@ -48,6 +69,11 @@ dynamic_forms:
           label: Unknown frog
           value: unknown_frog
   - select:
+      label: Species 1 call is
+      column: clarity
+      required: true
+      items: [clear, faint]
+  - select:
       label: Species 2 (optional)
       column: species_2
       items:
@@ -57,6 +83,11 @@ dynamic_forms:
         not_available:
           label: Unknown frog
           value: unknown_frog
+  - select:
+      label: Species 2 call is
+      column: clarity_2
+      required: false
+      items: [clear, faint]
   - select:
       label: Species 3 (optional)
       column: species_3
@@ -68,56 +99,10 @@ dynamic_forms:
           label: Unknown frog
           value: unknown_frog
   - select:
-      label: Calling index
-      column: calling_index
-      required: true
-      items:
-      - '1': 1 · calls countable, no overlap
-      - '2': 2 · calls overlap, callers still countable
-      - '3': 3 · full chorus, callers not countable
-  - select:
-      label: Clearest call is
-      column: clarity
-      required: true
+      label: Species 3 call is
+      column: clarity_3
+      required: false
       items: [clear, faint]
-  - select:
-      label: Call type (optional)
-      column: call_type
-      items: [advertisement, aggressive or territorial, release, distress, not sure]
-  - select:
-      label: Another species calling outside the window (optional)
-      column: species_outside
-      items:
-        path: species.csv
-        value: common_name
-        filter_box: true
-        not_available:
-          label: Unknown frog
-          value: unknown_frog
-
-  no_form:
-  - text: Tick every other sound you hear. Leave all blank if it is quiet.
-  - checkbox:
-      label: Insects
-      column: insects
-  - checkbox:
-      label: Birds or mammals
-      column: birds_mammals
-  - checkbox:
-      label: Rain
-      column: rain
-  - checkbox:
-      label: Wind
-      column: wind
-  - checkbox:
-      label: Flowing water
-      column: water
-  - checkbox:
-      label: Voices, traffic or machinery
-      column: human
-  - checkbox:
-      label: Handling or microphone noise
-      column: handling
 
   unsure_form:
   - select:

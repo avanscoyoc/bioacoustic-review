@@ -4,11 +4,12 @@ description:
     \ to the whole segment and look at the spectrogram.\n2. **Frog calling?** Click\
     \ to center the yellow 3-second window on the clearest frog call, then answer\
     \ **Yes**.\n3. **No frog anywhere in the segment?** Don't place a window. Answer\
-    \ **No** and tick the other sounds you hear.\n4. **Can't tell?** Place the window\
-    \ on the sound in question and answer **Unsure**.\n5. **Clipping, dead mic or\
-    \ nothing usable?** Answer **Recording unusable**.\n\nA call counts as in the\
-    \ window if at least half of it is inside. Use **Unknown frog** when you're sure\
-    \ it's a frog but not which species. Click **Submit** to save.\n"
+    \ **No**.\n4. **Can't tell?** Place the window on the sound in question and answer\
+    \ **Unsure**.\n5. **Clipping, dead mic or nothing usable?** Answer **Recording\
+    \ unusable**.\n6. Whatever your answer, tick every non-frog sound you hear anywhere\
+    \ in the 10 seconds.\n\nA call counts as in the window if at least half of it\
+    \ is inside. Use **Unknown frog** when you're sure it's a frog but not which\
+    \ species. Click **Submit** to save.\n"
   open: true
 display_columns:
 - id
