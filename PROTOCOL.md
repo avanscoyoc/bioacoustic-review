@@ -26,7 +26,7 @@ Listen to the whole 10 seconds and look at the spectrogram, then answer **Any fr
 Whatever your answer, tick every non-frog sound you hear anywhere in the 10 seconds. Click **Submit** to save. Add notes for anything unusual. Your answers save as you go, so you can stop and come back later.
 
 ## Ready to annotate a new dataset? 
-- Change `SOURCE`, and update the metadata in step 1. This will create a new export subfolder for your new annotation dataset and parameters. Continue with the protocol above
+Change `SOURCE`, and update the input settings in step 1. This will create a new export subfolder for your new dataset. Repeat the protocol above. 
 
 ## Please don't
 
